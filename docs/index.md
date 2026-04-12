@@ -1,4 +1,6 @@
-# M5 Cardputer Wardriver
+![Cardputer Wardriver logo](../assets/thumbnailsmall.png)
+
+# Cardputer Wardriver
 
 The M5 Cardputer Wardriver turns a pocket-sized M5Stack Cardputer (ESP32-S3) into a dedicated WiFi mapping device. Pair it with a cheap GPS module, pop in an SD card, and go for a walk or drive — every 2.4 GHz network you pass is automatically logged with its location, signal strength, and encryption type.
 

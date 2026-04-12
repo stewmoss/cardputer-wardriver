@@ -1,4 +1,6 @@
-# M5 Cardputer Wardriver
+![Cardputer Wardriver logo](assets/thumbnailsmall.png)
+
+# Cardputer Wardriver
 
 Turn your [M5Stack Cardputer](https://shop.m5stack.com/products/m5stack-cardputer-kit-w-m5stamps3) into a portable WiFi mapping tool. This firmware scans for 2.4 GHz networks, tags each one with GPS coordinates, and saves [WiGLE-compatible](https://wigle.net) CSV files to an SD card — ready to upload and contribute to the global wireless database.
 
