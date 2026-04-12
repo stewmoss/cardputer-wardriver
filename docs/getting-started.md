@@ -118,7 +118,7 @@ The device saves everything to the SD card and restarts with your new settings.
 
 After rebooting with a valid config:
 
-1. **Satellite search** — the screen shows satellite count and fix status. The LED glows **yellow**. WiFi scanning runs in the background but nothing is logged yet.
+1. **Satellite search** — the screen shows satellite count and fix status. The LED glows **yellow**. WiFi scanning runs in the background. In the default `fix_only` mode, nothing is logged yet — but if you've configured `zero_gps` or `last_known` mode, logging behaviour changes once scanning starts (see [GPS Logging Modes](configuration.md#gps-logging-modes)).
 
 2. **GPS lock** — once you have a 3D fix with good accuracy, the LED turns **green**, a CSV file is created (e.g., `wardriving_001.csv`), and logging begins automatically.
 

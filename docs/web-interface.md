@@ -41,6 +41,11 @@ The config page is a single dark-themed page with all your settings. Here's what
 | GMT Offset (hours) | Your timezone offset from UTC (e.g., `10` for AEST, `-5` for EST) | `0` |
 | GPS Logging Mode | What to do when GPS fix is lost — **Fix Only** (default), **Zero GPS**, or **Last Known** | Fix Only |
 
+**GPS Logging Mode options:**
+- **Fix Only** — safest, cleanest data. Only logs when you have a verified 3D fix. Best for accurate WiGLE uploads.
+- **Zero GPS** — logs every network even without GPS, using 0,0 coordinates. Useful for indoor surveys where you care about SSIDs, encryption, and signal strength but not location.
+- **Last Known** — reuses your last valid position during brief GPS outages (tunnels, bridges). Keeps data flowing with approximately correct coordinates.
+
 ### Scanning
 
 | Field | What to enter | Default |

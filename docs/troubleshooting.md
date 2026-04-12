@@ -72,8 +72,9 @@ Quick fixes for common problems. If you're stuck, connect via USB and open a ser
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| CSV file is empty | No networks passed filters, or no GPS fix | Check filter settings. Make sure GPS has a 3D fix. |
-| Entries with 0,0 coordinates | GPS fix lost briefly | Normal in tunnels, garages, or dense buildings. |
+| CSV file is empty | No networks passed filters, or no GPS fix | Check filter settings. Make sure GPS has a 3D fix. If you want to log without GPS, set `gps_log_mode` to `"zero_gps"` or `"last_known"`. |
+| Entries with 0,0 coordinates | `gps_log_mode` set to `"zero_gps"` | Expected — networks are logged without coordinates when GPS fix is lost. These rows won't appear on the WiGLE map but still record SSID/BSSID/signal data. |
+| Stale/repeated coordinates in CSV | `gps_log_mode` set to `"last_known"` | Expected — the last valid GPS position is reused during outages. Coordinates become less accurate the longer the outage lasts. |
 | File counter keeps going up | New file each boot | Expected — each session gets its own `wardriving_NNN.csv` |
 | "SD write failed" in debug log | SD card full or failing | Check available space. Try a new card. |
 | Debug log missing | Debug logging disabled | Enable `debug.enabled` in config |

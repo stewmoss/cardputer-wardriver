@@ -192,11 +192,21 @@ The marker records your exact GPS coordinates and timestamp. A confirmation beep
 
 ---
 
-## GPS Fix Lost Warning
+## GPS Fix Lost Behaviour
 
-If GPS accuracy degrades or the fix is lost entirely during scanning, Dashboard A shows a prominent red **NO FIX** warning. CSV logging pauses automatically (there are no valid coordinates to record), but WiFi scanning continues normally.
+If GPS accuracy degrades or the fix is lost entirely during scanning, Dashboard A shows a prominent red **NO FIX** warning. WiFi scanning always continues regardless of GPS status.
 
-The warning clears and logging resumes as soon as the GPS reacquires an acceptable fix.
+What happens to CSV logging depends on the configured `gps_log_mode`:
+
+| Mode | Behaviour when fix is lost | Dashboard indicator |
+|------|---------------------------|--------------------|
+| **Fix Only** (default) | Logging pauses — no data is written until the fix returns | Red **NO FIX** |
+| **Zero GPS** | Logging continues with 0,0 coordinates | Red **NO FIX** + yellow **GPS:0** in header |
+| **Last Known** | Logging continues using the last valid position | Red **NO FIX** + yellow **GPS:LAST** in header |
+
+In all three modes, the **NO FIX** warning clears and normal GPS-tagged logging resumes as soon as the GPS reacquires an acceptable 3D fix.
+
+> **Note:** In Zero GPS mode, geofence filtering is bypassed (since coordinates are zeros), but SSID/BSSID exclusion lists still apply. In Last Known mode, geofence filtering uses the stale coordinates.
 
 ---
 

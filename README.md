@@ -25,12 +25,16 @@ Turn your [M5Stack Cardputer](https://shop.m5stack.com/products/m5stack-cardpute
 
 ## Highlights
 
-- **WiGLE CSV v1.6** output — upload directly to wigle.net
-- **Five dashboard views** — summary, security breakdown, live feed, new APs, system info
-- **Privacy controls** — SSID/BSSID exclusion lists, GPS geofencing, MAC randomisation
-- **GPS-gated logging** — only records data with a valid satellite fix
-- **Web config portal** — configure everything from your phone's browser
-- **Smart power features** — display blanking, scan stop/start, low-battery auto-shutdown
+- **WiGLE CSV v1.6** output — upload directly to wigle.net, no conversion needed
+- **Active & passive scanning** — per-channel hop or all-channel sweep with configurable dwell times
+- **Three GPS logging modes** — strict fix-only, zero-GPS (log without coordinates), or last-known (reuse stale position)
+- **Five live dashboards** — summary, security snapshot, live AP feed, new AP discovery, system info — all flicker-free
+- **Web config portal** — configure everything from your phone's browser over the built-in WiFi hotspot
+- **Privacy controls** — SSID/BSSID exclusion lists, up to 10 GPS geofence zones, MAC randomisation with OUI spoofing
+- **Configurable sound alerts** — beep on new AP, blocked SSID, or geofence entry — each independently toggleable
+- **Smart power management** — display blanking, scan stop/start, low-battery auto-shutdown with session summary
+- **FLAG bookmarks** — press the G0 button to drop a GPS-tagged marker in your CSV for points of interest
+- **WiFi TX power & country code** — tune radio output and channel availability for your region
 - **On-device help** — press `H` anytime for a keyboard shortcut reference
 
 ## Build

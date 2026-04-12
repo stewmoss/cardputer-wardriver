@@ -10,7 +10,7 @@ The output is a standard **WiGLE CSV v1.6** file you can upload directly to [wig
 
 ### Scanning & Logging
 - **Configurable scan modes** — active or passive, per-channel hop or all-channel sweep, with adjustable dwell times
-- **GPS-gated logging** — data is only recorded after a 3D satellite fix with acceptable accuracy
+- **Three GPS logging modes** — strict fix-only (default), zero-GPS (log without coordinates), or last-known (reuse last valid position when fix drops)
 - **WiGLE CSV v1.6** — strict format compliance for direct upload
 - **10 KB write buffer** — batches SD writes to improve reliability and card longevity
 - **Auto-incrementing files** — each session creates a new `wardriving_NNN.csv`

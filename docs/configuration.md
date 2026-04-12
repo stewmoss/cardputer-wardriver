@@ -82,11 +82,51 @@ Here's the full config with default values. Each section is explained in detail 
 
 ### GPS Logging Modes
 
-| Mode | Behaviour |
-|------|-----------|
-| `"fix_only"` | Only log when you have a valid 3D fix (safest, default) |
-| `"zero_gps"` | Log with coordinates set to 0,0 when there's no fix |
-| `"last_known"` | Reuse the last valid position when fix is lost (requires at least one fix during the session) |
+Three modes control what happens when the GPS fix is lost or accuracy drops below the threshold. All three modes behave identically while a live 3D fix is available — they only differ when the fix is lost.
+
+#### Fix Only (default)
+
+```json
+"gps_log_mode": "fix_only"
+```
+
+CSV logging pauses when the fix is lost and resumes automatically when it returns. No data is written with inaccurate or missing coordinates.
+
+**Benefits:** Cleanest data for WiGLE uploads. Every row has a verified GPS position. Best for accurate coverage mapping.
+
+**Tradeoff:** Networks seen during GPS outages (tunnels, parking garages, dense urban canyons) are silently dropped.
+
+#### Zero GPS
+
+```json
+"gps_log_mode": "zero_gps"
+```
+
+Logging continues with coordinates set to `0.000000, 0.000000` and altitude `0.0`. The accuracy field retains the last known value. Geofence filtering is bypassed (since coordinates are zeros), but SSID/BSSID exclusion lists still apply.
+
+**Benefits:** Captures every network regardless of GPS status. Useful for indoor surveys, cataloguing SSIDs in buildings, or environments where GPS is unreliable. The zero-coordinate rows are easy to filter out in post-processing.
+
+**Tradeoff:** WiGLE will ignore rows with 0,0 coordinates, so these entries won't appear on the map. You still get SSID, BSSID, encryption, signal strength, and channel data.
+
+#### Last Known
+
+```json
+"gps_log_mode": "last_known"
+```
+
+When the fix drops, the device reuses the last valid GPS position from earlier in the session. Logging only starts once the first fix has been acquired — if the device has never had a fix this session, no data is written.
+
+**Benefits:** Keeps data flowing during brief GPS outages while maintaining approximately correct coordinates. Good for urban wardriving where you pass through short tunnels or under bridges.
+
+**Tradeoff:** Coordinates become stale the longer the outage lasts. Networks logged during a long GPS gap will all share the same position, which can cluster unrelated APs together on the map.
+
+#### Quick Comparison
+
+| Mode | Logs without fix? | Coordinates when no fix | WiGLE compatible? | Best for |
+|------|-------------------|------------------------|-------------------|----------|
+| `fix_only` | No | — | Yes | Accurate outdoor mapping |
+| `zero_gps` | Yes | 0, 0 | Rows ignored | Indoor surveys, SSID cataloguing |
+| `last_known` | Yes (after first fix) | Last valid position | Yes (approximately) | Brief GPS outages, urban driving |
 
 ---
 
