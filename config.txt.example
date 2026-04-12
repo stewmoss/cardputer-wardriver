@@ -1,0 +1,47 @@
+{
+    "gps": {
+        "tx_pin": 2,
+        "rx_pin": 1,
+        "accuracy_threshold_meters": 500,
+        "gmt_offset_hours": 0,
+        "gps_log_mode": "fix_only"
+    },
+    "scan": {
+        "scan_delay_ms": 150,
+        "active_dwell_ms": 150,
+        "passive_dwell_ms": 250,
+        "scan_mode": "active_all",
+        "mac_randomize_interval": 1,
+        "mac_spoof_oui": false,
+        "wifi_country_code": "Default",
+        "wifi_tx_power": 84
+    },
+    "filter": {
+        "excluded_ssids": [],
+        "excluded_bssids": [],
+        "geofence_boxes": []
+    },
+    "hardware": {
+        "buzzer_freq": 2500,
+        "buzzer_duration_ms": 50,
+        "screen_brightness": 128,
+        "led_brightness": 64,
+        "buzzer_enabled": true,
+        "fancy_intro": false,
+        "low_battery_threshold": 15,
+        "beep_on_new_ssid": false,
+        "beep_on_blocked_ssid": false,
+        "beep_on_geofence": false,
+        "keyboard_sounds": true
+    },
+    "debug": {
+        "enabled": false,
+        "super_debug_enabled": false,
+        "system_stats_enabled": true,
+        "system_stats_interval_s": 300
+    },
+    "web": {
+        "admin_user": "admin",
+        "admin_pass": "password"
+    }
+}

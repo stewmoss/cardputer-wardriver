@@ -1,0 +1,6 @@
+.pio
+.vscode
+!.vscode/extensions.json
+output/*
+output/wardriver-*.bin
+
