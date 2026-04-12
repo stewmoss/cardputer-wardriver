@@ -14,8 +14,6 @@
         "mac_randomize_interval": 1,
         "mac_spoof_oui": false,
         "wifi_country_code": "Default",
-        "wifi_tx_power": 84,
-        "wifi_country_code": "Default",
         "wifi_tx_power": 84
     },
     "filter": {
