@@ -11,7 +11,6 @@ public:
     Display();
     void begin();
     void showStartup();
-    void showAnimatedIntro();
     void showConfigMode(const String &ipAddress);
     void showSearchingSats(const GPSData &gps, int uniqueAPs, int lastScanCount);
     void showMonitoring();

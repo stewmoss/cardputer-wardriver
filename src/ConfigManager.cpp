@@ -62,7 +62,6 @@ void ConfigManager::setDefaults()
     config.hardware.screen_brightness = DEFAULT_SCREEN_BRIGHTNESS;
     config.hardware.led_brightness = DEFAULT_LED_BRIGHTNESS;
     config.hardware.buzzer_enabled = DEFAULT_BUZZER_ENABLED;
-    config.hardware.fancy_intro = DEFAULT_FANCY_INTRO;
     config.hardware.low_battery_threshold = DEFAULT_LOW_BATTERY_THRESHOLD;
     config.hardware.beep_on_new_ssid = DEFAULT_BEEP_ON_NEW_SSID;
     config.hardware.beep_on_blocked_ssid = DEFAULT_BEEP_ON_BLOCKED_SSID;
@@ -219,7 +218,6 @@ bool ConfigManager::loadConfig(const char *filename)
         config.hardware.screen_brightness = hw["screen_brightness"] | DEFAULT_SCREEN_BRIGHTNESS;
         config.hardware.led_brightness = hw["led_brightness"] | DEFAULT_LED_BRIGHTNESS;
         config.hardware.buzzer_enabled = hw["buzzer_enabled"] | DEFAULT_BUZZER_ENABLED;
-        config.hardware.fancy_intro = hw["fancy_intro"] | DEFAULT_FANCY_INTRO;
         config.hardware.low_battery_threshold = hw["low_battery_threshold"] | DEFAULT_LOW_BATTERY_THRESHOLD;
         config.hardware.beep_on_new_ssid = hw["beep_on_new_ssid"] | DEFAULT_BEEP_ON_NEW_SSID;
         config.hardware.beep_on_blocked_ssid = hw["beep_on_blocked_ssid"] | DEFAULT_BEEP_ON_BLOCKED_SSID;
@@ -302,7 +300,6 @@ bool ConfigManager::saveConfig(const char *filename)
     hw["screen_brightness"] = config.hardware.screen_brightness;
     hw["led_brightness"] = config.hardware.led_brightness;
     hw["buzzer_enabled"] = config.hardware.buzzer_enabled;
-    hw["fancy_intro"] = config.hardware.fancy_intro;
     hw["low_battery_threshold"] = config.hardware.low_battery_threshold;
     hw["beep_on_new_ssid"] = config.hardware.beep_on_new_ssid;
     hw["beep_on_blocked_ssid"] = config.hardware.beep_on_blocked_ssid;

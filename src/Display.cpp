@@ -34,7 +34,7 @@ void Display::showStartup()
     M5Cardputer.Display.setTextSize(2);
     M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
     M5Cardputer.Display.setCursor(30, 30);
-    M5Cardputer.Display.print("M5 WARDRIVER");
+    M5Cardputer.Display.print("CARDPUTER WARDRIVER");
 
     // Version
     M5Cardputer.Display.setTextSize(1);
@@ -53,28 +53,6 @@ void Display::showStartup()
     M5Cardputer.Display.setTextColor(0x7BEF, COL_BG); // grey
     M5Cardputer.Display.print("Hold G0 for Config Mode");
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
-}
-
-void Display::showAnimatedIntro()
-{
-    // Simple scan-line animation
-    for (int y = 0; y < SCREEN_HEIGHT; y += 3)
-    {
-        M5Cardputer.Display.drawLine(0, y, SCREEN_WIDTH, y, COL_CYAN);
-        delay(8);
-    }
-    delay(200);
-    clearScreen();
-
-    M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(COL_GREEN, COL_BG);
-    M5Cardputer.Display.setCursor(50, 50);
-    M5Cardputer.Display.print("WARDRIVER");
-    M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
-    M5Cardputer.Display.setCursor(60, 80);
-    M5Cardputer.Display.print("v" FIRMWARE_VERSION " Ready");
-    delay(1000);
 }
 
 void Display::showShutdown(const SessionSummary &summary, bool lowBattery)

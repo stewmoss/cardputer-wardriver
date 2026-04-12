@@ -28,10 +28,9 @@ Everything you need to know about using the wardriver day-to-day — what's on s
 |------|-------------|----------|
 | 1 | Splash screen (project name + firmware version) | ~1 s |
 | 2 | SD card mounts, config loads | ~1 s |
-| 3 | Animated intro (if enabled in config) | ~2 s |
-| 4 | Satellite search begins | Until GPS locks |
-| 5 | System clock syncs from GPS | Automatic |
-| 6 | Active scanning — logging to CSV | Continuous |
+| 3 | Satellite search begins | Until GPS locks |
+| 4 | System clock syncs from GPS | Automatic |
+| 5 | Active scanning — logging to CSV | Continuous |
 
 If no config file is found at step 2, the device jumps straight into [Config Mode](web-interface.md).
 
@@ -139,7 +138,7 @@ Battery level is checked every 60 seconds and shown in the footer of all dashboa
 
 ### Low Battery Auto-Shutdown
 
-When battery drops to or below the `low_battery_threshold` (default: 15%), a 10-second countdown appears. The LED turns red and the keyboard is locked. After the countdown, logs are flushed, the SD card is unmounted, and the shutdown summary is displayed.
+When battery drops to or below the `low_battery_threshold` (default: 5%), a 10-second countdown appears. The LED turns red and the keyboard is locked. After the countdown, logs are flushed, the SD card is unmounted, and the shutdown summary is displayed.
 
 Set `low_battery_threshold` to `0` in config to disable this feature.
 

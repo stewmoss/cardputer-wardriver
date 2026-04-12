@@ -342,7 +342,6 @@ void WebPortal::handleSave()
     config.hardware.beep_on_new_ssid = server.hasArg("beep_on_new_ssid");
     config.hardware.beep_on_blocked_ssid = server.hasArg("beep_on_blocked_ssid");
     config.hardware.beep_on_geofence = server.hasArg("beep_on_geofence");
-    config.hardware.fancy_intro = server.hasArg("fancy_intro");
     if (server.hasArg("low_battery_threshold"))
     {
         int v = server.arg("low_battery_threshold").toInt();
@@ -468,7 +467,7 @@ void WebPortal::sendHTMLChunked()
     html += F("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
               "<meta charset=\"UTF-8\">\n"
               "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n"
-              "<title>M5 Wardriver Config</title>\n<style>\n"
+              "<title>Cardputer Wardriver Config</title>\n<style>\n"
               "*{box-sizing:border-box;margin:0;padding:0}\n"
               "body{font-family:'Segoe UI',sans-serif;background:#0f0f23;color:#e0e0e0;padding:16px}\n"
               "h1{color:#00d4ff;text-align:center;margin-bottom:8px;font-size:1.4em}\n"
@@ -495,7 +494,7 @@ void WebPortal::sendHTMLChunked()
               "</style>\n</head>\n<body>\n");
 
     // --- Title & version ---
-    html += F("<h1>M5 Wardriver</h1>\n<div class=\"ver\">Firmware v");
+    html += F("<h1>Cardputer Wardriver</h1>\n<div class=\"ver\">Firmware v");
     html += FIRMWARE_VERSION;
     html += F("</div>\n<form method=\"POST\" action=\"/save\">\n");
 
@@ -766,11 +765,7 @@ void WebPortal::sendHTMLChunked()
     html += F("\" oninput=\"document.getElementById('lval').textContent=this.value\">\n"
               "<div class=\"range-val\" id=\"lval\">");
     html += String(cfg.hardware.led_brightness);
-    html += F("</div>\n<div class=\"cb\">\n"
-              "<input type=\"checkbox\" id=\"fancy_intro\" name=\"fancy_intro\"");
-    if (cfg.hardware.fancy_intro)
-        html += F(" checked");
-    html += F(">\n<label for=\"fancy_intro\">Fancy Boot Animation</label>\n</div>\n"
+    html += F("</div>\n"
               "<label for=\"low_battery_threshold\">Low Battery Shutdown Threshold (%)</label>\n"
               "<input type=\"number\" id=\"low_battery_threshold\" name=\"low_battery_threshold\" "
               "min=\"0\" max=\"100\" value=\"");
@@ -858,7 +853,7 @@ void WebPortal::handleDebugLog()
         "<!DOCTYPE html><html><head>"
         "<meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        "<title>Debug Log - M5 Wardriver</title>"
+        "<title>Debug Log - Cardputer Wardriver</title>"
         "<style>"
         "body{font-family:sans-serif;background:#1a1a2e;color:#eee;padding:16px;margin:0;}"
         "h1{color:#4fc3f7;margin-top:0;}"

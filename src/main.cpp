@@ -135,12 +135,6 @@ void setup()
         return;
     }
 
-    // 11. Optional fancy intro animation
-    if (appConfig.hardware.fancy_intro)
-    {
-        display.showAnimatedIntro();
-    }
-
     // 12. Initialize GPS
     superDebug = appConfig.debug.enabled && appConfig.debug.super_debug_enabled;
     gpsManager.begin(appConfig.gps.tx_pin, appConfig.gps.rx_pin, superDebug);

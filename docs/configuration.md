@@ -34,7 +34,9 @@ Here's the full config with default values. Each section is explained in detail 
         "passive_dwell_ms": 250,
         "scan_mode": "active_all",
         "mac_randomize_interval": 1,
-        "mac_spoof_oui": false
+        "mac_spoof_oui": false,
+        "wifi_country_code": "Default",
+        "wifi_tx_power": 84
     },
     "filter": {
         "excluded_ssids": [],
@@ -47,8 +49,11 @@ Here's the full config with default values. Each section is explained in detail 
         "screen_brightness": 128,
         "led_brightness": 64,
         "buzzer_enabled": true,
-        "fancy_intro": false,
-        "low_battery_threshold": 15
+        "keyboard_sounds": true,
+        "beep_on_new_ssid": false,
+        "beep_on_blocked_ssid": false,
+        "beep_on_geofence": false,
+        "low_battery_threshold": 5
     },
     "debug": {
         "enabled": false,
@@ -95,6 +100,8 @@ Here's the full config with default values. Each section is explained in detail 
 | `scan_mode` | string | `"active_all"` | Scanning strategy — see below. Requires reboot to take effect. |
 | `mac_randomize_interval` | int | `1` | How often to randomise the device MAC before scanning. `0` = disabled, `1` = every scan, `N` = every Nth scan. Range: 0–100. |
 | `mac_spoof_oui` | bool | `false` | When `false` (default), randomised MACs are flagged as locally-administered (safe). When `true`, ~50% of MACs will look like real manufacturer addresses — harder to fingerprint as randomised. |
+| `wifi_country_code` | string | `"Default"` | ISO 3166-1 alpha-2 country code for channel and power compliance (e.g. `"US"`, `"GB"`, `"AU"`). `"Default"` uses the ESP32 built-in settings. |
+| `wifi_tx_power` | int | `84` | WiFi transmit power in quarter-dBm units (8–84). `84` = 21 dBm (maximum). Lower values reduce range and power consumption. |
 
 ### Scan Modes
 
@@ -158,9 +165,12 @@ Each box has four values: `top_lat` (north), `bottom_lat` (south), `left_lon` (w
 | `buzzer_duration_ms` | int | `50` | How long each beep lasts in milliseconds. Range: 10–500. |
 | `screen_brightness` | int | `128` | Display backlight brightness. Range: 10–255. |
 | `led_brightness` | int | `64` | Status LED brightness. `0` = off, `255` = maximum. |
-| `buzzer_enabled` | bool | `true` | Play a beep when a new unique AP is discovered |
-| `fancy_intro` | bool | `false` | Show an animated boot sequence after config loads |
-| `low_battery_threshold` | int | `15` | Auto-shutdown when battery drops to this percentage. `0` = disabled. |
+| `buzzer_enabled` | bool | `true` | Master switch for all buzzer sounds. When `false`, all sound options below are overridden. |
+| `keyboard_sounds` | bool | `true` | Sound feedback for key presses (view cycle, start/stop, help, etc.). |
+| `beep_on_new_ssid` | bool | `false` | Beep when a new unique access point is discovered. |
+| `beep_on_blocked_ssid` | bool | `false` | Beep when a filtered/excluded access point is scanned. |
+| `beep_on_geofence` | bool | `false` | Periodic beep every 10 seconds while GPS is inside a geofence zone. |
+| `low_battery_threshold` | int | `5` | Auto-shutdown when battery drops to this percentage. `0` = disabled. |
 
 ---
 

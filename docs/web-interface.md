@@ -49,6 +49,8 @@ The config page is a single dark-themed page with all your settings. Here's what
 | Active Dwell (ms) | Time per channel during active scans | `150` |
 | Passive Dwell (ms) | Time per channel during passive scans | `250` |
 | Scan Mode | Choose from active/passive + hop/all combinations | `active_all` |
+| WiFi Country Code | ISO 3166-1 country code for channel/power compliance | `"Default"` |
+| WiFi TX Power | Transmit power in quarter-dBm units (8–84) | `84` |
 | MAC Randomise Interval | How often to rotate the device MAC (`0` = never, `1` = every scan) | `1` |
 | MAC Spoof OUI | Make randomised MACs look like real manufacturers | Off |
 
@@ -64,13 +66,16 @@ The config page is a single dark-themed page with all your settings. Here's what
 
 | Field | Range | Default |
 |-------|-------|---------|
-| Buzzer Enabled | Checkbox | On |
+| Buzzer Enabled | Checkbox (master switch) | On |
+| Keyboard Sounds | Checkbox | On |
+| Beep on New SSID | Checkbox | Off |
+| Beep on Blocked SSID | Checkbox | Off |
+| Sound in Geofenced Area | Checkbox | Off |
 | Buzzer Frequency | 100–8000 Hz | `2500` |
 | Buzzer Duration | 10–500 ms | `50` |
 | Screen Brightness | Slider: 10–255 | `128` |
 | LED Brightness | Slider: 0–255 (0 = off) | `64` |
-| Fancy Boot Animation | Checkbox | Off |
-| Low Battery Threshold | 0–100% (0 = disabled) | `15` |
+| Low Battery Threshold | 0–100% (0 = disabled) | `5` |
 
 ### Debug
 

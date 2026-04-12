@@ -87,7 +87,7 @@ After a successful build, the firmware binary is also saved to `output/wardriver
 ## 6. First Boot
 
 1. Power on the Cardputer with the SD card inserted
-2. The splash screen shows **"M5 WARDRIVER"** and the firmware version
+2. The splash screen shows **"Cardputer WARDRIVER"** and the firmware version
 3. Since no config file exists yet, the device **automatically enters Config Mode**
 4. The screen displays the WiFi AP name and IP address:
    - **SSID:** `M5-Wardriver`

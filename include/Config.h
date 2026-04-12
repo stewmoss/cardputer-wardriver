@@ -42,13 +42,12 @@
 #define DEFAULT_SCAN_DELAY_MS 150
 #define DEFAULT_ACTIVE_DWELL_TIME_MS 150
 #define DEFAULT_PASSIVE_DWELL_TIME_MS 250
-#define DEFAULT_SCAN_MODE "active_hop"
+#define DEFAULT_SCAN_MODE "active_all"
 #define DEFAULT_BUZZER_FREQ 2500
 #define DEFAULT_BUZZER_DURATION_MS 50
 #define DEFAULT_SCREEN_BRIGHTNESS 128
 #define DEFAULT_LED_BRIGHTNESS 64
 #define DEFAULT_BUZZER_ENABLED true
-#define DEFAULT_FANCY_INTRO false
 #define DEFAULT_LOW_BATTERY_THRESHOLD 5
 #define DEFAULT_BEEP_ON_NEW_SSID false
 #define DEFAULT_BEEP_ON_BLOCKED_SSID false
@@ -265,7 +264,6 @@ struct HardwareConfig
     int screen_brightness;
     int led_brightness;
     bool buzzer_enabled;
-    bool fancy_intro;
     int low_battery_threshold;
     bool beep_on_new_ssid;
     bool beep_on_blocked_ssid;

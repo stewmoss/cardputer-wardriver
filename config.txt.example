@@ -14,6 +14,8 @@
         "mac_randomize_interval": 1,
         "mac_spoof_oui": false,
         "wifi_country_code": "Default",
+        "wifi_tx_power": 84,
+        "wifi_country_code": "Default",
         "wifi_tx_power": 84
     },
     "filter": {
@@ -27,8 +29,11 @@
         "screen_brightness": 128,
         "led_brightness": 64,
         "buzzer_enabled": true,
-        "fancy_intro": false,
-        "low_battery_threshold": 15,
+        "keyboard_sounds": true,
+        "beep_on_new_ssid": false,
+        "beep_on_blocked_ssid": false,
+        "beep_on_geofence": false,
+        "low_battery_threshold": 5,
         "beep_on_new_ssid": false,
         "beep_on_blocked_ssid": false,
         "beep_on_geofence": false,
