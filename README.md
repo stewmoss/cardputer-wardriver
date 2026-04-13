@@ -63,4 +63,4 @@ pio device monitor         # Serial monitor (115200 baud)
 
 ## License
 
-See LICENSE file for details.
+Released under the MIT License. See [LICENSE](LICENSE).
