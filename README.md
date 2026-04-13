@@ -13,6 +13,7 @@ Turn your [M5Stack Cardputer](https://shop.m5stack.com/products/m5stack-cardpute
 5. **Connect** your phone/laptop to the `M5-Wardriver` WiFi network
 6. **Configure** at `http://192.168.4.1`, then save and reboot
 7. **Go outside** — scanning starts automatically after GPS lock
+8. **Safe Shutdown** — press `Q` to flush logs and unmount the SD card before powering off. Shows a session summary.
 
 > **New here?** See the [Getting Started](docs/getting-started.md) guide for a full walkthrough with wiring diagrams and screenshots.
 

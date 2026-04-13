@@ -143,7 +143,7 @@ See the full [Operation Guide](operation.md) for dashboard details and advanced 
 
 ## 9. Retrieve Your Data
 
-1. Press `Q` for a safe shutdown (or just power off)
+1. Press `Q` for a safe shutdown
 2. Remove the SD card and insert it into a computer
 3. Navigate to the `/wardriver/` folder
 4. Upload any `wardriving_*.csv` file to [wigle.net/uploads](https://wigle.net/uploads)
