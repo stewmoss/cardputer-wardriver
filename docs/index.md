@@ -24,7 +24,8 @@ The output is a standard **WiGLE CSV v1.6** file you can upload directly to [wig
 - **Accuracy guard** — skip logging when GPS accuracy drops below a threshold
 
 ### User Interface
-- **Five dashboard views** — cycle through summary, security snapshot, live feed, new AP discoveries, and system settings
+- **Six dashboard views** — cycle through summary, security snapshot, live feed, new AP discoveries, channel activity map, and system settings
+- **Channel congestion map** — colour-coded bar chart (green/yellow/orange/red) with session, sweep, and unique views
 - **Keyboard help overlay** — press `H` for an instant shortcut reference
 - **Colour-coded status LED** — see device state at a glance without reading the screen
 - **Buzzer alerts** — audio beep when a brand-new access point is discovered

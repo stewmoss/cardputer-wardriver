@@ -128,9 +128,11 @@ After rebooting with a valid config:
 
 | Key | What it does |
 |-----|-------------|
-| `ENTER` | Cycle through the five dashboard views |
+| `ENTER` | Cycle through the dashboard views |
+| `SPACE` | Toggle dashboard sub-mode (e.g., channel view mode) |
 | `H` | Show/hide the keyboard help overlay |
 | `B` | Toggle the display on/off (saves battery) |
+| `C` | Enter Config Mode |
 | `S` | Mute/unmute the buzzer |
 | `P` | Pause/resume CSV logging (scanning continues) |
 | `X` | Stop/start scanning entirely (low power mode) |

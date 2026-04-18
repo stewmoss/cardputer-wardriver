@@ -8,7 +8,7 @@ Everything you need to know about using the wardriver day-to-day — what's on s
 
 | Key | Action |
 |-----|--------|
-| **ENTER** | Cycle dashboard views (A → B → C → D → E) |
+| **ENTER** | Cycle dashboard views (A → B → C → D → E → F) |
 | **H** | Show/hide keyboard help overlay |
 | **B** | Toggle display on/off (works on shutdown screen too) |
 | **C** | Enter Config Mode |
@@ -16,6 +16,7 @@ Everything you need to know about using the wardriver day-to-day — what's on s
 | **Q** | Safe shutdown |
 | **X** | Stop/start scanning (low-power toggle) |
 | **P** | Pause/resume CSV logging |
+| **SPACE** | Toggle dashboard sub-mode (where applicable) |
 | **G0 button** | Boot: force Config Mode · Running: drop FLAG marker · Shutdown/Config: reboot |
 
 > **Tip:** Press **H** at any time to see this list on-screen. All other keys are blocked while the help overlay is showing.
@@ -38,7 +39,7 @@ If no config file is found at step 2, the device jumps straight into [Config Mod
 
 ## Dashboard Views
 
-Press **ENTER** to cycle through five views. Each shows different information about your session.
+Press **ENTER** to cycle through six views. Each shows different information about your session.
 
 ### A — Summary (Main View)
 
@@ -104,7 +105,17 @@ Each row shows the time, SSID (or raw MAC if hidden), and signal strength.
 
 Like the live feed, but only shows **brand-new networks** — the last 10 BSSIDs seen for the first time this session. Each network appears here only once.
 
-### E — System Settings
+### E — Channel Activity
+
+A vertical bar chart showing WiFi AP counts per channel (1–13). Three modes, cycled with **SPACE**:
+
+- **Session** (default) — accumulated counts across all sweeps since boot
+- **Sweep** — counts from the last completed scan only
+- **Unique** — counts only unique BSSIDs per channel
+
+Bars are colour-coded by relative congestion: **green** (quiet), **yellow** (moderate), **orange** (busy), **red** (most congested). Channels with zero APs show a subtle grey outline. The Y-axis auto-scales with grid lines at 0%, 25%, 50%, 75%, and 100% of the peak value. When scanning is stopped, the chart freezes on the last known data.
+
+### F — System Settings
 
 Shows battery level, RAM usage, and sound status. This data is read once when you switch to this view (press ENTER to leave and come back to refresh it).
 

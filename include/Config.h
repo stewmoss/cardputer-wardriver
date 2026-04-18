@@ -178,6 +178,10 @@ struct ScanSession
     uint32_t totalSweeps;
     std::vector<RecentEntry> recentAPs;
     std::vector<RecentEntry> recentUniqueAPs;
+    uint16_t channelCountsSweep[13];    // Per-channel AP counts from the latest sweep (channels 1-13)
+    uint16_t channelCountsSession[13];  // Accumulated per-channel AP counts across all sweeps
+    uint16_t channelCountsUnique[13];   // Per-channel AP counts for unique BSSIDs only
+    uint8_t channelViewMode;            // 0 = session, 1 = sweep, 2 = unique
     GPSData gps;
     unsigned long bootTime;
     unsigned long startScanTime;
@@ -187,6 +191,7 @@ struct ScanSession
     unsigned long lastDashCUpdate;
     unsigned long lastDashDUpdate;
     unsigned long lastDashEUpdate;
+    unsigned long lastDashFUpdate;
     unsigned long lastSystemStatsLog;
     unsigned long lastBatteryCheck;
     unsigned long lowBatteryWarnStart;
@@ -210,6 +215,10 @@ struct ScanSession
         totalSweeps = 0;
         recentAPs.clear();
         recentUniqueAPs.clear();
+        memset(channelCountsSweep, 0, sizeof(channelCountsSweep));
+        memset(channelCountsSession, 0, sizeof(channelCountsSession));
+        memset(channelCountsUnique, 0, sizeof(channelCountsUnique));
+        channelViewMode = 0;
         gps = GPSData();
         bootTime = 0;
         startScanTime = 0;
@@ -219,6 +228,7 @@ struct ScanSession
         lastDashCUpdate = 0;
         lastDashDUpdate = 0;
         lastDashEUpdate = 0;
+        lastDashFUpdate = 0;
         lastSystemStatsLog = 0;
         lastBatteryCheck = 0;
         lowBatteryWarnStart = 0;
@@ -319,7 +329,8 @@ enum KeyAction
     KEY_ACTION_SHOW_HELP,
     KEY_ACTION_DISMISS_HELP,
     KEY_ACTION_TOGGLE_SCAN,
-    KEY_ACTION_TOGGLE_PAUSE
+    KEY_ACTION_TOGGLE_PAUSE,
+    KEY_ACTION_SUB_VIEW
 };
 
 enum DisplayView
@@ -329,7 +340,8 @@ enum DisplayView
     VIEW_DASHBOARD_B,    // Snapshot: security breakdown, top 3 strongest APs
     VIEW_DASHBOARD_C,    // Live feed: last 10 APs seen (SSID/MAC, time, RSSI)
     VIEW_DASHBOARD_D,    // Discovery: last 10 unique APs first seen (SSID/MAC, time, RSSI)
-    VIEW_DASHBOARD_E     // Settings: RAM, battery, sound status
+    VIEW_DASHBOARD_E,    // Channel Activity: per-channel AP count bar chart
+    VIEW_DASHBOARD_F     // Settings: RAM, battery, sound status
 };
 
 #endif // CONFIG_H
