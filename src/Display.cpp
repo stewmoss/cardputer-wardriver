@@ -829,7 +829,7 @@ void Display::updateDashboardD(const std::vector<RecentEntry> &recentUnique)
 
 // ── Dashboard E helpers ─────────────────────────────────────────────────────
 
-static uint16_t congestionColor(uint16_t count, uint16_t maxCount)
+static uint16_t congestionColor(uint32_t count, uint32_t maxCount)
 {
     if (count == 0) return 0;
     float ratio = (float)count / (float)maxCount;
@@ -874,15 +874,15 @@ static void drawGridLines()
 
 // ── Dashboard E ─────────────────────────────────────────────────────────────
 
-void Display::updateDashboardE(const uint16_t sweepCounts[13],
-                               const uint16_t sessionCounts[13],
-                               const uint16_t uniqueCounts[13],
+void Display::updateDashboardE(const uint32_t sweepCounts[13],
+                               const uint32_t sessionCounts[13],
+                               const uint32_t uniqueCounts[13],
                                uint8_t viewMode)
 {
     if (_isHelpVisible)
         return;
 
-    const uint16_t *counts;
+    const uint32_t *counts;
     const char *modeName;
     switch (viewMode)
     {
@@ -927,7 +927,7 @@ void Display::updateDashboardE(const uint16_t sweepCounts[13],
                        : (g == GRID_COUNT - 1) ? DE_CHART_TOP
                        : gridY[g] - 3;
             M5Cardputer.Display.setCursor(0, labelY);
-            M5Cardputer.Display.print((uint16_t)0);
+            M5Cardputer.Display.print((uint32_t)0);
         }
 
         memset(_dashECache.barHeights, 0, sizeof(_dashECache.barHeights));
@@ -938,7 +938,7 @@ void Display::updateDashboardE(const uint16_t sweepCounts[13],
     }
 
     // Compute max value for Y-axis scaling
-    uint16_t maxCount = 1;
+    uint32_t maxCount = 1;
     for (int i = 0; i < DE_NUM_CHANNELS; i++)
     {
         if (counts[i] > maxCount) maxCount = counts[i];
@@ -949,11 +949,11 @@ void Display::updateDashboardE(const uint16_t sweepCounts[13],
     {
         // Erase all old Y-axis labels
         M5Cardputer.Display.setTextSize(1);
-        uint16_t oldMax = _dashECache.maxY;
+        uint32_t oldMax = _dashECache.maxY;
         M5Cardputer.Display.setTextColor(COL_BG, COL_BG);
         for (int g = 0; g < GRID_COUNT; g++)
         {
-            uint16_t oldVal = oldMax * g / (GRID_COUNT - 1);
+            uint32_t oldVal = oldMax * g / (GRID_COUNT - 1);
             int labelY = (g == 0) ? DE_CHART_BOTTOM - 8
                        : (g == GRID_COUNT - 1) ? DE_CHART_TOP
                        : gridY[g] - 3;
@@ -965,7 +965,7 @@ void Display::updateDashboardE(const uint16_t sweepCounts[13],
         M5Cardputer.Display.setTextColor(COL_LABEL, COL_BG);
         for (int g = 0; g < GRID_COUNT; g++)
         {
-            uint16_t newVal = maxCount * g / (GRID_COUNT - 1);
+            uint32_t newVal = maxCount * g / (GRID_COUNT - 1);
             int labelY = (g == 0) ? DE_CHART_BOTTOM - 8
                        : (g == GRID_COUNT - 1) ? DE_CHART_TOP
                        : gridY[g] - 3;

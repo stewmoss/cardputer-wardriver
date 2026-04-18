@@ -26,7 +26,7 @@ Turn your [M5Stack Cardputer](https://shop.m5stack.com/products/m5stack-cardpute
 3. **Insert** a FAT32 micro SD card
 4. **Power on** — first boot enters Config Mode automatically
 5. **Connect** your phone/laptop to the `M5-Wardriver` WiFi network
-6. **Configure** at `http://192.168.4.1`, then save and reboot. (username: admin password: password)
+6. **Configure** at `http://192.168.4.1`, then save and reboot. (default username: `admin`, default password: `password`) **Change the default password on first setup** — see [Configuration](docs/configuration.md).
 7. **Go outside** — scanning starts automatically after GPS lock
 8. **Safe Shutdown** — press `Q` to flush logs and unmount the SD card before powering off. Shows a session summary.
 

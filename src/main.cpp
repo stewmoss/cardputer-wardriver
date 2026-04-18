@@ -68,8 +68,8 @@ void setup()
 
     // 2. Display startup splash (before SD — no SD access)
     // The splash screen only gets the delay() at the end of the setup method, the delay
-    // is calclated from splashSart to give the right delay.
-    uint16_t splashStart = millis();
+    // is calculated from splashStart to give the right delay.
+    uint32_t splashStart = millis();
     display.begin();
     display.showStartup();
 
@@ -165,7 +165,7 @@ void setup()
     }
 
     // Delay for 2000
-    uint16_t elapsed = millis() - splashStart;
+    uint32_t elapsed = millis() - splashStart;
     if (elapsed < 2000)
     {
         delay(2000 - elapsed);
@@ -551,7 +551,7 @@ void handleActiveScan()
     // ── When scan is stopped, skip GPS/WiFi/logging — low power mode ────
     if (session.scanStopped)
     {
-        // Only update display
+        // Still render whichever dashboard the user is viewing (frozen data)
         DisplayView currentView = display.getCurrentView();
         if (currentView == VIEW_DASHBOARD_A)
         {
@@ -570,9 +570,50 @@ void handleActiveScan()
                 session.lastDisplayUpdate = now;
             }
         }
+        else if (currentView == VIEW_DASHBOARD_B)
+        {
+            if (now - session.lastDisplayUpdate >= 2000UL)
+            {
+                std::vector<WiFiNetwork> topNets = getTopNetworks(session.lastResults, 3);
+                display.updateDashboardB(session.lastStats, topNets, session.lastScanCount);
+                session.lastDisplayUpdate = now;
+            }
+        }
+        else if (currentView == VIEW_DASHBOARD_C)
+        {
+            if (now - session.lastDashCUpdate >= 2000UL)
+            {
+                display.updateDashboardC(session.recentAPs);
+                session.lastDashCUpdate = now;
+            }
+        }
+        else if (currentView == VIEW_DASHBOARD_D)
+        {
+            if (now - session.lastDashDUpdate >= 2000UL)
+            {
+                display.updateDashboardD(session.recentUniqueAPs);
+                session.lastDashDUpdate = now;
+            }
+        }
+        else if (currentView == VIEW_DASHBOARD_E)
+        {
+            if (now - session.lastDashEUpdate >= 2000UL)
+            {
+                display.updateDashboardE(
+                    session.channelCountsSweep,
+                    session.channelCountsSession,
+                    session.channelCountsUnique,
+                    session.channelViewMode);
+                session.lastDashEUpdate = now;
+            }
+        }
         else if (currentView == VIEW_DASHBOARD_F)
         {
-            display.updateDashboardF(alertManager.isMuted());
+            if (now - session.lastDashFUpdate >= 2000UL)
+            {
+                display.updateDashboardF(alertManager.isMuted());
+                session.lastDashFUpdate = now;
+            }
         }
 
         // Extra delay for power saving when stopped

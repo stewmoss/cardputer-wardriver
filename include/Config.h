@@ -178,9 +178,9 @@ struct ScanSession
     uint32_t totalSweeps;
     std::vector<RecentEntry> recentAPs;
     std::vector<RecentEntry> recentUniqueAPs;
-    uint16_t channelCountsSweep[13];    // Per-channel AP counts from the latest sweep (channels 1-13)
-    uint16_t channelCountsSession[13];  // Accumulated per-channel AP counts across all sweeps
-    uint16_t channelCountsUnique[13];   // Per-channel AP counts for unique BSSIDs only
+    uint32_t channelCountsSweep[13];    // Per-channel AP counts from the latest sweep (channels 1-13)
+    uint32_t channelCountsSession[13];  // Accumulated per-channel AP counts across all sweeps
+    uint32_t channelCountsUnique[13];   // Per-channel AP counts for unique BSSIDs only
     uint8_t channelViewMode;            // 0 = session, 1 = sweep, 2 = unique
     GPSData gps;
     unsigned long bootTime;

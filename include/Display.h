@@ -43,9 +43,9 @@ public:
                           int visibleCount = 0);
     void updateDashboardC(const std::vector<RecentEntry> &recent);
     void updateDashboardD(const std::vector<RecentEntry> &recentUnique);
-    void updateDashboardE(const uint16_t sweepCounts[13],
-                          const uint16_t sessionCounts[13],
-                          const uint16_t uniqueCounts[13],
+    void updateDashboardE(const uint32_t sweepCounts[13],
+                          const uint32_t sessionCounts[13],
+                          const uint32_t uniqueCounts[13],
                           uint8_t viewMode);
     void updateDashboardF(bool soundMuted);
 
@@ -105,7 +105,7 @@ private:
     {
         uint16_t barHeights[13];
         uint16_t barColors[13];
-        uint16_t maxY;
+        uint32_t maxY;
         uint8_t viewMode;
     };
 
