@@ -129,6 +129,10 @@ KeyAction KeyboardHandler::poll(AppState currentState, bool helpVisible, bool di
         {
             return KEY_ACTION_TOGGLE_PAUSE;
         }
+        if (key == ' ')
+        {
+            return KEY_ACTION_SUB_VIEW;
+        }
     }
 
     return KEY_ACTION_NONE;

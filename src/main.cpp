@@ -66,14 +66,17 @@ void setup()
     auto cfg = M5.config();
     M5Cardputer.begin(cfg, true);
 
-    Serial.begin(115200);
-    delay(1000); // Wait for USB CDC re-enumeration after reset (was 1000) TODO
-    Serial.println("\n\n=== M5 Cardputer Wardriver ===");
-    Serial.println("Firmware v" FIRMWARE_VERSION);
-
     // 2. Display startup splash (before SD — no SD access)
+    // The splash screen only gets the delay() at the end of the setup method, the delay
+    // is calculated from splashStart to give the right delay.
+    uint32_t splashStart = millis();
     display.begin();
     display.showStartup();
+
+    Serial.begin(115200);
+    delay(1000); // Wait for USB CDC re-enumeration after reset 
+    Serial.println("\n\n=== M5 Cardputer Wardriver ===");
+    Serial.println("Firmware v" FIRMWARE_VERSION);
 
     // 3. Initialize SD card
     SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_SPI_CS_PIN);
@@ -159,6 +162,13 @@ void setup()
     if (currentState != STATE_LOW_BATTERY_WARNING)
     {
         enterSearchingSatellitesState();
+    }
+
+    // Delay for 2000
+    uint32_t elapsed = millis() - splashStart;
+    if (elapsed < 2000)
+    {
+        delay(2000 - elapsed);
     }
 }
 
@@ -342,6 +352,8 @@ void executeKeyAction(KeyAction action)
         session.lastDisplayUpdate = 0;
         session.lastDashCUpdate = 0;
         session.lastDashDUpdate = 0;
+        session.lastDashEUpdate = 0;
+        session.lastDashFUpdate = 0;
         logger.debugPrintln("[Input] Dashboard toggled");
         return;
 
@@ -397,6 +409,8 @@ void executeKeyAction(KeyAction action)
         session.lastDisplayUpdate = 0;
         session.lastDashCUpdate = 0;
         session.lastDashDUpdate = 0;
+        session.lastDashEUpdate = 0;
+        session.lastDashFUpdate = 0;
         logger.debugPrintln("[Input] 'h' pressed: help dismissed");
         return;
 
@@ -407,6 +421,21 @@ void executeKeyAction(KeyAction action)
     case KEY_ACTION_TOGGLE_PAUSE:
         handleTogglePauseAction();
         return;
+
+    case KEY_ACTION_SUB_VIEW:
+    {
+        DisplayView cv = display.getCurrentView();
+        if (cv == VIEW_DASHBOARD_E)
+        {
+            session.channelViewMode = (session.channelViewMode + 1) % 3;
+            session.lastDashEUpdate = 0;
+            const char* modeNames[] = {"SESSION", "SWEEP", "UNIQUE"};
+            char buf[64];
+            snprintf(buf, sizeof(buf), "[Input] Space: channel view -> %s mode", modeNames[session.channelViewMode]);
+            logger.debugPrintln(buf);
+        }
+        return;
+    }
     }
 }
 
@@ -522,7 +551,7 @@ void handleActiveScan()
     // ── When scan is stopped, skip GPS/WiFi/logging — low power mode ────
     if (session.scanStopped)
     {
-        // Only update display
+        // Still render whichever dashboard the user is viewing (frozen data)
         DisplayView currentView = display.getCurrentView();
         if (currentView == VIEW_DASHBOARD_A)
         {
@@ -541,9 +570,50 @@ void handleActiveScan()
                 session.lastDisplayUpdate = now;
             }
         }
+        else if (currentView == VIEW_DASHBOARD_B)
+        {
+            if (now - session.lastDisplayUpdate >= 2000UL)
+            {
+                std::vector<WiFiNetwork> topNets = getTopNetworks(session.lastResults, 3);
+                display.updateDashboardB(session.lastStats, topNets, session.lastScanCount);
+                session.lastDisplayUpdate = now;
+            }
+        }
+        else if (currentView == VIEW_DASHBOARD_C)
+        {
+            if (now - session.lastDashCUpdate >= 2000UL)
+            {
+                display.updateDashboardC(session.recentAPs);
+                session.lastDashCUpdate = now;
+            }
+        }
+        else if (currentView == VIEW_DASHBOARD_D)
+        {
+            if (now - session.lastDashDUpdate >= 2000UL)
+            {
+                display.updateDashboardD(session.recentUniqueAPs);
+                session.lastDashDUpdate = now;
+            }
+        }
         else if (currentView == VIEW_DASHBOARD_E)
         {
-            display.updateDashboardE(alertManager.isMuted());
+            if (now - session.lastDashEUpdate >= 2000UL)
+            {
+                display.updateDashboardE(
+                    session.channelCountsSweep,
+                    session.channelCountsSession,
+                    session.channelCountsUnique,
+                    session.channelViewMode);
+                session.lastDashEUpdate = now;
+            }
+        }
+        else if (currentView == VIEW_DASHBOARD_F)
+        {
+            if (now - session.lastDashFUpdate >= 2000UL)
+            {
+                display.updateDashboardF(alertManager.isMuted());
+                session.lastDashFUpdate = now;
+            }
         }
 
         // Extra delay for power saving when stopped
@@ -678,6 +748,10 @@ void handleActiveScan()
                     if (wifiScanner.isNewBSSID(net.bssid))
                     {
                         isNewAp = true;
+                        // Track unique channel counts for Dashboard E
+                        int uch = net.channel;
+                        if (uch >= 1 && uch <= 13)
+                            session.channelCountsUnique[uch - 1]++;
                         // Track for Dashboard D — last 10 unique APs
                         session.recentUniqueAPs.insert(session.recentUniqueAPs.begin(), {net, seenTime});
                         if ((int)session.recentUniqueAPs.size() > MAX_RECENT_APS)
@@ -777,8 +851,20 @@ void handleActiveScan()
     {
         if (now - session.lastDashEUpdate >= 2000UL)
         {
-            display.updateDashboardE(alertManager.isMuted());
+            display.updateDashboardE(
+                session.channelCountsSweep,
+                session.channelCountsSession,
+                session.channelCountsUnique,
+                session.channelViewMode);
             session.lastDashEUpdate = now;
+        }
+    }
+    else if (currentView == VIEW_DASHBOARD_F)
+    {
+        if (now - session.lastDashFUpdate >= 2000UL)
+        {
+            display.updateDashboardF(alertManager.isMuted());
+            session.lastDashFUpdate = now;
         }
     }
 }
@@ -971,6 +1057,18 @@ void processCompletedScan()
             session.maxStationsPerSweep = (uint32_t)session.lastScanCount;
         }
         session.lastStats = wifiScanner.getSecurityStats(session.lastResults);
+
+        // Compute per-channel counts for the latest sweep
+        memset(session.channelCountsSweep, 0, sizeof(session.channelCountsSweep));
+        for (const WiFiNetwork &net : session.lastResults)
+        {
+            int ch = net.channel;
+            if (ch >= 1 && ch <= 13)
+            {
+                session.channelCountsSweep[ch - 1]++;
+                session.channelCountsSession[ch - 1]++;
+            }
+        }
     }
 }
 

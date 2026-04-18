@@ -43,7 +43,11 @@ public:
                           int visibleCount = 0);
     void updateDashboardC(const std::vector<RecentEntry> &recent);
     void updateDashboardD(const std::vector<RecentEntry> &recentUnique);
-    void updateDashboardE(bool soundMuted);
+    void updateDashboardE(const uint32_t sweepCounts[13],
+                          const uint32_t sessionCounts[13],
+                          const uint32_t uniqueCounts[13],
+                          uint8_t viewMode);
+    void updateDashboardF(bool soundMuted);
 
 private:
     DisplayView currentView;
@@ -96,6 +100,16 @@ private:
     DashACache _dashACache;
     DashBCache _dashBCache;
     DashAOverlay _dashAOverlay;
+
+    struct DashECache
+    {
+        uint16_t barHeights[13];
+        uint16_t barColors[13];
+        uint32_t maxY;
+        uint8_t viewMode;
+    };
+
+    DashECache _dashECache;
 
     void _resetCaches();
     void _drawField(const String &oldVal, const String &newVal,

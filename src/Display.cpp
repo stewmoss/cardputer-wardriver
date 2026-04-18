@@ -10,6 +10,9 @@
 #define COL_RED 0xF800
 #define COL_CYAN 0x07FF
 #define COL_ORANGE 0xFDA0
+#define COL_LIGHT_GREY 0xAD75  // Zero-count bar outline
+#define COL_GRID       0x4208  // Horizontal grid lines
+#define COL_LABEL      0xC618  // Channel labels & Y-axis labels (light silver)
 #define VIEW_NONE ((DisplayView) - 1)
 
 Display::Display()
@@ -30,16 +33,25 @@ void Display::showStartup()
 {
     clearScreen();
 
-    // Title
+    // Title — "Wardriver" large
     M5Cardputer.Display.setTextSize(2);
-    M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
+    M5Cardputer.Display.setTextColor(COL_GREEN, COL_BG);
     M5Cardputer.Display.setCursor(30, 30);
-    M5Cardputer.Display.print("CARDPUTER WARDRIVER");
+    M5Cardputer.Display.print("Wardriver");
+
+    // Subtitle — "// stewmoss" small, baseline-aligned
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(COL_GREEN, COL_BG);
+    M5Cardputer.Display.setCursor(141, 38);
+    M5Cardputer.Display.print("// stewmoss");
+
+    // Divider
+    M5Cardputer.Display.drawFastHLine(30, 52, 180, 0x7BEF);
 
     // Version
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
-    M5Cardputer.Display.setCursor(60, 60);
+    M5Cardputer.Display.setCursor(60, 62);
     M5Cardputer.Display.print("Firmware v" FIRMWARE_VERSION);
 
     // Init message
@@ -49,7 +61,7 @@ void Display::showStartup()
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
 
     // Hint
-    M5Cardputer.Display.setCursor(15, 115);
+    M5Cardputer.Display.setCursor(15, 118);
     M5Cardputer.Display.setTextColor(0x7BEF, COL_BG); // grey
     M5Cardputer.Display.print("Hold G0 for Config Mode");
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
@@ -218,11 +230,6 @@ void Display::showSearchingSats(const GPSData &gps, int uniqueAPs, int lastScanC
         M5Cardputer.Display.setCursor(10, 94);
         M5Cardputer.Display.print("logging...");
 
-        // Static hint
-        M5Cardputer.Display.setTextColor(0x7BEF, COL_BG);
-        M5Cardputer.Display.setCursor(10, 115);
-        M5Cardputer.Display.print("ENT=Views  H = Help");
-
         M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
 
         _resetCaches();
@@ -276,6 +283,10 @@ void Display::nextView()
     {
         currentView = VIEW_DASHBOARD_E;
     }
+    else if (currentView == VIEW_DASHBOARD_E)
+    {
+        currentView = VIEW_DASHBOARD_F;
+    }
     else
     {
         currentView = VIEW_DASHBOARD_A;
@@ -310,6 +321,11 @@ void Display::_resetCaches()
         _dashBCache.rows[i] = S;
 
     _dashAOverlay = {false, false, false};
+
+    memset(_dashECache.barHeights, 0, sizeof(_dashECache.barHeights));
+    memset(_dashECache.barColors, 0, sizeof(_dashECache.barColors));
+    _dashECache.maxY = 0;
+    _dashECache.viewMode = 0;
 }
 
 void Display::_drawField(const String &oldVal, const String &newVal,
@@ -402,7 +418,7 @@ void Display::updateDashboardA(const GPSData &gps, const String &filename,
         M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
 
         // Footer
-        drawFooter("ENT=snap  c=cfg  b=off");
+        drawFooter("ENT=next    H=Help");
 
         _resetCaches();
         _lastDrawnView = VIEW_DASHBOARD_A;
@@ -609,7 +625,7 @@ void Display::updateDashboardB(const SecurityStats &stats,
         M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
 
         // Footer
-        drawFooter("ENT=next H = Help");
+        drawFooter("ENT=next    H=Help");
 
         _resetCaches();
         _lastDrawnView = VIEW_DASHBOARD_B;
@@ -728,7 +744,7 @@ void Display::updateDashboardC(const std::vector<RecentEntry> &recent)
     if (_isHelpVisible)
         return;
 
-    drawHeader("Recent APs [3/5]");
+    drawHeader("Recent APs [3/6]");
 
     // Full content-area clear on every call (2-second refresh, no flicker concern)
     M5Cardputer.Display.fillRect(0, HEADER_HEIGHT, SCREEN_WIDTH,
@@ -764,7 +780,7 @@ void Display::updateDashboardC(const std::vector<RecentEntry> &recent)
     }
 
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
-    drawFooter("ENT=next H = Help");
+    drawFooter("ENT=next    H=Help");
 }
 
 void Display::updateDashboardD(const std::vector<RecentEntry> &recentUnique)
@@ -772,7 +788,7 @@ void Display::updateDashboardD(const std::vector<RecentEntry> &recentUnique)
     if (_isHelpVisible)
         return;
 
-    drawHeader("Unique APs [4/5]");
+    drawHeader("Unique APs [4/6]");
 
     // Full content-area clear on every call (2-second refresh, no flicker concern)
     M5Cardputer.Display.fillRect(0, HEADER_HEIGHT, SCREEN_WIDTH,
@@ -808,19 +824,248 @@ void Display::updateDashboardD(const std::vector<RecentEntry> &recentUnique)
     }
 
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
-    drawFooter("ENT=next H = Help");
+    drawFooter("ENT=next    H=Help");
 }
 
-void Display::updateDashboardE(bool soundMuted)
+// ── Dashboard E helpers ─────────────────────────────────────────────────────
+
+static uint16_t congestionColor(uint32_t count, uint32_t maxCount)
+{
+    if (count == 0) return 0;
+    float ratio = (float)count / (float)maxCount;
+    if (ratio <= 0.25f) return COL_GREEN;
+    if (ratio <= 0.50f) return COL_YELLOW;
+    if (ratio <= 0.75f) return COL_ORANGE;
+    return COL_RED;
+}
+
+// Chart geometry (file-scope so drawGridLines() can access them)
+static const int DE_CHART_LEFT   = 22;
+static const int DE_CHART_TOP    = 24;
+static const int DE_CHART_BOTTOM = 110;
+static const int DE_CHART_HEIGHT = DE_CHART_BOTTOM - DE_CHART_TOP; // 86
+static const int DE_NUM_CHANNELS = 13;
+static const int DE_BAR_WIDTH    = 13;
+static const int DE_BAR_GAP      = 3;
+static const int DE_LABEL_Y      = DE_CHART_BOTTOM + 2;
+
+static const int GRID_COUNT   = 5;
+static const int GRID_DOT_GAP = 4;
+
+static const int gridY[GRID_COUNT] = {
+    DE_CHART_BOTTOM,                              // 0%   = 110
+    DE_CHART_BOTTOM - DE_CHART_HEIGHT / 4,        // 25%  = 89
+    DE_CHART_BOTTOM - DE_CHART_HEIGHT / 2,        // 50%  = 67
+    DE_CHART_BOTTOM - 3 * DE_CHART_HEIGHT / 4,    // 75%  = 46
+    DE_CHART_TOP                                  // 100% = 24
+};
+
+static void drawGridLines()
+{
+    for (int g = 0; g < GRID_COUNT; g++)
+    {
+        int y = gridY[g];
+        for (int px = DE_CHART_LEFT; px < DE_CHART_LEFT + DE_NUM_CHANNELS * (DE_BAR_WIDTH + DE_BAR_GAP); px += GRID_DOT_GAP)
+        {
+            M5Cardputer.Display.drawPixel(px, y, COL_GRID);
+        }
+    }
+}
+
+// ── Dashboard E ─────────────────────────────────────────────────────────────
+
+void Display::updateDashboardE(const uint32_t sweepCounts[13],
+                               const uint32_t sessionCounts[13],
+                               const uint32_t uniqueCounts[13],
+                               uint8_t viewMode)
+{
+    if (_isHelpVisible)
+        return;
+
+    const uint32_t *counts;
+    const char *modeName;
+    switch (viewMode)
+    {
+    case 1:  counts = sweepCounts;   modeName = "SWEEP";   break;
+    case 2:  counts = uniqueCounts;  modeName = "UNIQUE";  break;
+    default: counts = sessionCounts; modeName = "SESSION"; break;
+    }
+
+    // Full redraw on first entry or mode switch
+    bool fullRedraw = (_lastDrawnView != VIEW_DASHBOARD_E)
+                   || (_dashECache.viewMode != viewMode);
+
+    if (fullRedraw)
+    {
+        clearScreen();
+
+        char headerBuf[32];
+        snprintf(headerBuf, sizeof(headerBuf), "CH ACTIVITY - %s [5/6]", modeName);
+        drawHeader(String(headerBuf));
+
+        // Channel labels along bottom (1-13) — light silver
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(COL_LABEL, COL_BG);
+        for (int i = 0; i < DE_NUM_CHANNELS; i++)
+        {
+            int x = DE_CHART_LEFT + i * (DE_BAR_WIDTH + DE_BAR_GAP);
+            M5Cardputer.Display.setCursor(x + 2, DE_LABEL_Y);
+            M5Cardputer.Display.print(i + 1);
+        }
+
+        drawFooter("SPC=mode  ENT=next  H=Help");
+
+        // Draw grid lines
+        drawGridLines();
+
+        // Draw initial Y-axis labels (all 0 — will update in scale-change block)
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(COL_LABEL, COL_BG);
+        for (int g = 0; g < GRID_COUNT; g++)
+        {
+            int labelY = (g == 0) ? DE_CHART_BOTTOM - 8
+                       : (g == GRID_COUNT - 1) ? DE_CHART_TOP
+                       : gridY[g] - 3;
+            M5Cardputer.Display.setCursor(0, labelY);
+            M5Cardputer.Display.print((uint32_t)0);
+        }
+
+        memset(_dashECache.barHeights, 0, sizeof(_dashECache.barHeights));
+        memset(_dashECache.barColors, 0, sizeof(_dashECache.barColors));
+        _dashECache.maxY = 0;
+        _dashECache.viewMode = viewMode;
+        _lastDrawnView = VIEW_DASHBOARD_E;
+    }
+
+    // Compute max value for Y-axis scaling
+    uint32_t maxCount = 1;
+    for (int i = 0; i < DE_NUM_CHANNELS; i++)
+    {
+        if (counts[i] > maxCount) maxCount = counts[i];
+    }
+
+    // Update Y-axis labels and force full bar redraw on scale change
+    if (maxCount != _dashECache.maxY)
+    {
+        // Erase all old Y-axis labels
+        M5Cardputer.Display.setTextSize(1);
+        uint32_t oldMax = _dashECache.maxY;
+        M5Cardputer.Display.setTextColor(COL_BG, COL_BG);
+        for (int g = 0; g < GRID_COUNT; g++)
+        {
+            uint32_t oldVal = oldMax * g / (GRID_COUNT - 1);
+            int labelY = (g == 0) ? DE_CHART_BOTTOM - 8
+                       : (g == GRID_COUNT - 1) ? DE_CHART_TOP
+                       : gridY[g] - 3;
+            M5Cardputer.Display.setCursor(0, labelY);
+            M5Cardputer.Display.print(oldVal);
+        }
+
+        // Draw new Y-axis labels
+        M5Cardputer.Display.setTextColor(COL_LABEL, COL_BG);
+        for (int g = 0; g < GRID_COUNT; g++)
+        {
+            uint32_t newVal = maxCount * g / (GRID_COUNT - 1);
+            int labelY = (g == 0) ? DE_CHART_BOTTOM - 8
+                       : (g == GRID_COUNT - 1) ? DE_CHART_TOP
+                       : gridY[g] - 3;
+            M5Cardputer.Display.setCursor(0, labelY);
+            M5Cardputer.Display.print(newVal);
+        }
+
+        _dashECache.maxY = maxCount;
+
+        // Force all bars to redraw since scale changed
+        memset(_dashECache.barHeights, 0, sizeof(_dashECache.barHeights));
+        memset(_dashECache.barColors, 0, sizeof(_dashECache.barColors));
+
+        // Clear chart area and redraw grid
+        M5Cardputer.Display.fillRect(DE_CHART_LEFT, DE_CHART_TOP,
+            DE_NUM_CHANNELS * (DE_BAR_WIDTH + DE_BAR_GAP), DE_CHART_HEIGHT, COL_BG);
+        drawGridLines();
+    }
+
+    // Draw/update bars with congestion coloring
+    bool anyBarChanged = false;
+
+    for (int i = 0; i < DE_NUM_CHANNELS; i++)
+    {
+        uint16_t barPixelHeight = (uint16_t)((uint32_t)counts[i] * DE_CHART_HEIGHT / maxCount);
+        uint16_t barColor = congestionColor(counts[i], maxCount);
+
+        if (counts[i] > 0 && barPixelHeight == 0)
+            barPixelHeight = 1;
+
+        // Zero-count: draw outline indicator
+        if (counts[i] == 0)
+        {
+            if (_dashECache.barHeights[i] != 0 || _dashECache.barColors[i] != 0)
+            {
+                int x = DE_CHART_LEFT + i * (DE_BAR_WIDTH + DE_BAR_GAP);
+                M5Cardputer.Display.fillRect(x, DE_CHART_TOP, DE_BAR_WIDTH, DE_CHART_HEIGHT, COL_BG);
+                M5Cardputer.Display.drawRect(x, DE_CHART_BOTTOM - 3, DE_BAR_WIDTH, 3, COL_LIGHT_GREY);
+                _dashECache.barHeights[i] = 0;
+                _dashECache.barColors[i] = 0;
+                anyBarChanged = true;
+            }
+            continue;
+        }
+
+        // Skip if neither height nor color changed
+        if (barPixelHeight == _dashECache.barHeights[i]
+            && barColor == _dashECache.barColors[i])
+            continue;
+
+        int x = DE_CHART_LEFT + i * (DE_BAR_WIDTH + DE_BAR_GAP);
+        anyBarChanged = true;
+
+        // Color changed: must redraw entire bar
+        if (barColor != _dashECache.barColors[i])
+        {
+            M5Cardputer.Display.fillRect(x, DE_CHART_BOTTOM - _dashECache.barHeights[i],
+                DE_BAR_WIDTH, _dashECache.barHeights[i], COL_BG);
+            M5Cardputer.Display.fillRect(x, DE_CHART_BOTTOM - barPixelHeight,
+                DE_BAR_WIDTH, barPixelHeight, barColor);
+        }
+        else
+        {
+            // Height-only change: delta approach
+            uint16_t oldH = _dashECache.barHeights[i];
+            if (barPixelHeight > oldH)
+            {
+                int fillTop = DE_CHART_BOTTOM - barPixelHeight;
+                int fillHeight = barPixelHeight - oldH;
+                M5Cardputer.Display.fillRect(x, fillTop, DE_BAR_WIDTH, fillHeight, barColor);
+            }
+            else
+            {
+                int eraseTop = DE_CHART_BOTTOM - oldH;
+                int eraseHeight = oldH - barPixelHeight;
+                M5Cardputer.Display.fillRect(x, eraseTop, DE_BAR_WIDTH, eraseHeight, COL_BG);
+            }
+        }
+
+        _dashECache.barHeights[i] = barPixelHeight;
+        _dashECache.barColors[i] = barColor;
+    }
+
+    // Restore grid dots after bar changes
+    if (anyBarChanged)
+    {
+        drawGridLines();
+    }
+}
+
+void Display::updateDashboardF(bool soundMuted)
 {
     if (_isHelpVisible)
         return;
 
     // Full redraw every time the view is entered — data is read on entry only
-    if (_lastDrawnView != VIEW_DASHBOARD_E)
+    if (_lastDrawnView != VIEW_DASHBOARD_F)
     {
         clearScreen();
-        drawHeader("SETTINGS [5/5]");
+        drawHeader("SETTINGS [6/6]");
 
         // ── Battery (large, prominent) ──────────────────────────────────
         int bat = _batteryLevel;
@@ -879,9 +1124,9 @@ void Display::updateDashboardE(bool soundMuted)
         }
 
         M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
-        drawFooter("ENT=next H = Help");
+        drawFooter("ENT=next    H=Help");
 
-        _lastDrawnView = VIEW_DASHBOARD_E;
+        _lastDrawnView = VIEW_DASHBOARD_F;
     }
 }
 
@@ -899,7 +1144,7 @@ void Display::drawFooter(const String &status)
 {
     int footerY = SCREEN_HEIGHT - FOOTER_HEIGHT;
     M5Cardputer.Display.fillRect(0, footerY, SCREEN_WIDTH, FOOTER_HEIGHT, 0x18E3); // dark grey
-    M5Cardputer.Display.setTextColor(0x7BEF, 0x18E3);
+    M5Cardputer.Display.setTextColor(COL_TEXT, 0x18E3);
 
     // Left: status hint
     M5Cardputer.Display.setCursor(5, footerY + 3);
@@ -991,6 +1236,7 @@ void Display::showHelp()
         {"Q", "Safe shutdown"},
         {"X", "Stop / Start scan"},
         {"P", "Pause / Resume logging"},
+        {"SPACE", "Dashboard sub-mode"},
         {"G0", "Drop FLAG marker"},
     };
 
