@@ -29,7 +29,7 @@ void Display::begin()
     clearScreen();
 }
 
-void Display::showStartup()
+void Display::showStartup(const char *modelName, const char *source)
 {
     clearScreen();
 
@@ -50,12 +50,29 @@ void Display::showStartup()
 
     // Version
     M5Cardputer.Display.setTextSize(1);
-    M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+    M5Cardputer.Display.setTextColor(COL_GREEN, COL_BG);
     M5Cardputer.Display.setCursor(60, 62);
     M5Cardputer.Display.print("Firmware v" FIRMWARE_VERSION);
 
+    // Model / source line (optional)
+    if (modelName != nullptr)
+    {
+        String modelLine = String("Model: ") + modelName;
+        if (source != nullptr)
+        {
+            modelLine += String(" (") + source + ")";
+        }
+        int textWidth = modelLine.length() * 6; // size-1 = 6px per char
+        int x = (SCREEN_WIDTH - textWidth) / 2;
+        if (x < 2) x = 2;
+        M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
+        M5Cardputer.Display.setCursor(x, 74);
+        M5Cardputer.Display.print(modelLine);
+        M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+    }
+
     // Init message
-    M5Cardputer.Display.setCursor(55, 85);
+    M5Cardputer.Display.setCursor(55, 92);
     M5Cardputer.Display.setTextColor(COL_YELLOW, COL_BG);
     M5Cardputer.Display.print("Initializing...");
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
@@ -1056,7 +1073,7 @@ void Display::updateDashboardE(const uint32_t sweepCounts[13],
     }
 }
 
-void Display::updateDashboardF(bool soundMuted)
+void Display::updateDashboardF(bool soundMuted, const char *modelName, const char *source)
 {
     if (_isHelpVisible)
         return;
@@ -1097,20 +1114,14 @@ void Display::updateDashboardF(bool soundMuted)
         uint32_t freeRAM = freeHeap + freePsram;
 
         M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
-        M5Cardputer.Display.setCursor(10, 68);
-        M5Cardputer.Display.print("Total RAM: ");
+        M5Cardputer.Display.setCursor(10, 64);
+        M5Cardputer.Display.print("RAM:   ");
         M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
-        M5Cardputer.Display.print(String(totalRAM / 1024) + " KB");
-
-        M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
-        M5Cardputer.Display.setCursor(10, 80);
-        M5Cardputer.Display.print("Free RAM:  ");
-        M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
-        M5Cardputer.Display.print(String(freeRAM / 1024) + " KB");
+        M5Cardputer.Display.print(String(freeRAM / 1024) + "/" + String(totalRAM / 1024) + " KB");
 
         // ── Sound Status ────────────────────────────────────────────────
         M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
-        M5Cardputer.Display.setCursor(10, 96);
+        M5Cardputer.Display.setCursor(10, 76);
         M5Cardputer.Display.print("Sound: ");
         if (soundMuted)
         {
@@ -1121,6 +1132,24 @@ void Display::updateDashboardF(bool soundMuted)
         {
             M5Cardputer.Display.setTextColor(COL_GREEN, COL_BG);
             M5Cardputer.Display.print("ON");
+        }
+
+        // ── Model / Source ──────────────────────────────────────────────
+        if (modelName != nullptr)
+        {
+            M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
+            M5Cardputer.Display.setCursor(10, 88);
+            M5Cardputer.Display.print("Model: ");
+            M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+            M5Cardputer.Display.print(modelName);
+        }
+        if (source != nullptr)
+        {
+            M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
+            M5Cardputer.Display.setCursor(10, 100);
+            M5Cardputer.Display.print("Src:   ");
+            M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+            M5Cardputer.Display.print(source);
         }
 
         M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);

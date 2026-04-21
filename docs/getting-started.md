@@ -8,7 +8,7 @@ This guide walks you through everything from wiring to your first wardriving ses
 
 | Item | Details |
 |------|---------|
-| **M5Stack Cardputer** | v1.1 with ESP32-S3 |
+| **M5Stack Cardputer** | Cardputer v1.1 or Cardputer ADV |
 | **GPS module** | Any UART GPS at 115200 baud (e.g., BN-220, NEO-6M, M5Stack GPS Unit) |
 | **Micro SD card** | FAT32 formatted, 2 GB – 32 GB |
 | **USB-C cable** | For flashing and serial debug |
@@ -43,12 +43,12 @@ Connect your GPS module to the Cardputer via the Grove port or direct wiring:
 
 | GPS Pin | Cardputer Pin | Default GPIO |
 |---------|---------------|-------------|
-| TX (data out) | RX | GPIO 2 |
-| RX (data in)  | TX | GPIO 1 |
+| TX (data out) | RX | GPIO 1 |
+| RX (data in)  | TX | GPIO 2 |
 | VCC | 3.3V or 5V | — |
 | GND | GND | — |
 
-> **Tip:** The TX/RX pins are configurable — if your GPS uses different pins, you can change them later in the web portal or config file. The defaults (GPIO 1 and 2) work with most Grove-connected modules.
+> **Tip:** The TX/RX pins are configurable — if your GPS uses different pins, you can change them later in the web portal or config file. The default Cardputer-side pins are TX=`2` and RX=`1`.
 
 ---
 
@@ -87,7 +87,7 @@ After a successful build, the firmware binary is also saved to `output/wardriver
 ## 6. First Boot
 
 1. Power on the Cardputer with the SD card inserted
-2. The splash screen shows **"Cardputer WARDRIVER"** and the firmware version
+2. The splash screen shows **Wardriver**, the firmware version, and the detected hardware model
 3. Since no config file exists yet, the device **automatically enters Config Mode**
 4. The screen displays the WiFi AP name and IP address:
    - **SSID:** `M5-Wardriver`
@@ -101,6 +101,7 @@ After a successful build, the firmware binary is also saved to `output/wardriver
 2. A captive portal should open automatically. If not, go to `http://192.168.4.1`
 3. Log in with the default credentials: **admin** / **password**
 4. Fill in your settings:
+   - **Hardware Model** — leave `Auto-detect` unless you need to force `Cardputer (v1.1)` or `Cardputer ADV`
    - **GPS TX/RX pins** — match your wiring (default: TX=2, RX=1)
    - **GMT Offset** — your timezone offset from UTC (e.g., `10` for AEST, `-5` for EST)
    - **Scan mode** — choose between active/passive and hop/all-channel

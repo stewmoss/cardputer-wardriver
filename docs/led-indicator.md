@@ -11,7 +11,6 @@ The single RGB LED on the front of the Cardputer tells you what the device is do
 | **Yellow** | Searching for GPS satellites |
 | **Blue** | WiFi scan in progress |
 | **Green** | GPS locked, ready between scans |
-| **Dim Blue** | Scanning stopped (`X` key pressed) |
 | **Purple** | Config Mode — web portal active |
 | **Red** | Error (SD failure, etc.) or low battery warning |
 | **Off** | Shutdown complete — safe to remove SD card |

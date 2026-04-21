@@ -35,7 +35,8 @@
 
 #define DEFAULT_GPS_TX 2
 #define DEFAULT_GPS_RX 1
-#define DEFAULT_GPS_BAUD 115200 // 57600  or 115200
+#define DEFAULT_GPS_BAUD 115200 // 57600 or 115200
+#define DEFAULT_GPS_CONFIG_BAUD DEFAULT_GPS_BAUD
 #define DEFAULT_ACCURACY_THRESHOLD 500.0f
 #define DEFAULT_GMT_OFFSET_HOURS 0
 #define DEFAULT_GPS_LOG_MODE "fix_only"
@@ -63,6 +64,7 @@
 #define DEFAULT_MAC_SPOOF_OUI false
 #define DEFAULT_WIFI_COUNTRY_CODE "Default"
 #define DEFAULT_WIFI_TX_POWER 84
+#define DEFAULT_DEVICE_MODEL "auto"
 
 // ── Timing Constants ---------------------------------------------
 #define SYSTEM_STATS_LOG_INTERVAL_MS 300000UL // 5 minutes
@@ -166,83 +168,13 @@ struct SessionSummary
     uint32_t totalSweeps;
 };
 
-struct ScanSession
-{
-    bool scanStopped;
-    bool loggingPaused;
-    std::vector<WiFiNetwork> lastResults;
-    SecurityStats lastStats;
-    int lastScanCount;
-    uint32_t maxStationsPerSweep;
-    uint64_t totalStationsSeen;
-    uint32_t totalSweeps;
-    std::vector<RecentEntry> recentAPs;
-    std::vector<RecentEntry> recentUniqueAPs;
-    uint32_t channelCountsSweep[13];    // Per-channel AP counts from the latest sweep (channels 1-13)
-    uint32_t channelCountsSession[13];  // Accumulated per-channel AP counts across all sweeps
-    uint32_t channelCountsUnique[13];   // Per-channel AP counts for unique BSSIDs only
-    uint8_t channelViewMode;            // 0 = session, 1 = sweep, 2 = unique
-    GPSData gps;
-    unsigned long bootTime;
-    unsigned long startScanTime;
-    unsigned long lastScanTime;
-    unsigned long lastFlushTime;
-    unsigned long lastDisplayUpdate;
-    unsigned long lastDashCUpdate;
-    unsigned long lastDashDUpdate;
-    unsigned long lastDashEUpdate;
-    unsigned long lastDashFUpdate;
-    unsigned long lastSystemStatsLog;
-    unsigned long lastBatteryCheck;
-    unsigned long lowBatteryWarnStart;
-    unsigned long lastGeofenceBeep;
-    int lastBatteryLevel;
-
-    ScanSession()
-    {
-        reset();
-    }
-
-    void reset()
-    {
-        scanStopped = false;
-        loggingPaused = false;
-        lastResults.clear();
-        lastStats = SecurityStats();
-        lastScanCount = 0;
-        maxStationsPerSweep = 0;
-        totalStationsSeen = 0;
-        totalSweeps = 0;
-        recentAPs.clear();
-        recentUniqueAPs.clear();
-        memset(channelCountsSweep, 0, sizeof(channelCountsSweep));
-        memset(channelCountsSession, 0, sizeof(channelCountsSession));
-        memset(channelCountsUnique, 0, sizeof(channelCountsUnique));
-        channelViewMode = 0;
-        gps = GPSData();
-        bootTime = 0;
-        startScanTime = 0;
-        lastScanTime = 0;
-        lastFlushTime = 0;
-        lastDisplayUpdate = 0;
-        lastDashCUpdate = 0;
-        lastDashDUpdate = 0;
-        lastDashEUpdate = 0;
-        lastDashFUpdate = 0;
-        lastSystemStatsLog = 0;
-        lastBatteryCheck = 0;
-        lowBatteryWarnStart = 0;
-        lastGeofenceBeep = 0;
-        lastBatteryLevel = -1;
-    }
-};
-
 // ── Configuration Structs ───────────────────────────────────────────────────
 
 struct GPSConfig
 {
     int tx_pin;
     int rx_pin;
+    int baud;
     float accuracy_threshold_meters;
     int gmt_offset_hours;
     String gps_log_mode; // "fix_only", "zero_gps", "last_known"
@@ -295,14 +227,101 @@ struct WebConfig
     String admin_pass;
 };
 
+struct DeviceConfig
+{
+    // User choice of hardware model: "auto" | "cardputer" | "cardputer_adv"
+    String model;
+    // Runtime-populated record of the effective hardware profile used on
+    // this boot. When `model` is "auto" this will match the auto-detected
+    // board; when the user forces a model, this stores that manual
+    // selection instead. Persisted so the firmware can detect when the
+    // effective profile used for reseeding has changed (see
+    // ConfigManager::reseedFromProfile()). User-facing as read-only.
+    String detected_model;
+};
+
 struct AppConfig
 {
+    DeviceConfig device;
     GPSConfig gps;
     ScanConfig scan;
     FilterConfig filter;
     HardwareConfig hardware;
     DebugConfig debug;
     WebConfig web;
+};
+
+struct ScanSession
+{
+    bool scanStopped;
+    bool loggingPaused;
+    std::vector<WiFiNetwork> lastResults;
+    SecurityStats lastStats;
+    int lastScanCount;
+    uint32_t maxStationsPerSweep;
+    uint64_t totalStationsSeen;
+    uint32_t totalSweeps;
+    std::vector<RecentEntry> recentAPs;
+    std::vector<RecentEntry> recentUniqueAPs;
+    uint32_t channelCountsSweep[13];    // Per-channel AP counts from the latest sweep (channels 1-13)
+    uint32_t channelCountsSession[13];  // Accumulated per-channel AP counts across all sweeps
+    uint32_t channelCountsUnique[13];   // Per-channel AP counts for unique BSSIDs only
+    uint8_t channelViewMode;            // 0 = session, 1 = sweep, 2 = unique
+    GPSData gps;
+    unsigned long bootTime;
+    unsigned long startScanTime;
+    unsigned long lastScanTime;
+    unsigned long lastFlushTime;
+    unsigned long lastDisplayUpdate;
+    unsigned long lastDashCUpdate;
+    unsigned long lastDashDUpdate;
+    unsigned long lastDashEUpdate;
+    unsigned long lastDashFUpdate;
+    unsigned long lastSystemStatsLog;
+    unsigned long lastBatteryCheck;
+    unsigned long lowBatteryWarnStart;
+    unsigned long lastGeofenceBeep;
+    int lastBatteryLevel;
+
+    AppConfig config;
+
+    ScanSession()
+    {
+        reset();
+    }
+
+    void reset()
+    {
+        scanStopped = false;
+        loggingPaused = false;
+        lastResults.clear();
+        lastStats = SecurityStats();
+        lastScanCount = 0;
+        maxStationsPerSweep = 0;
+        totalStationsSeen = 0;
+        totalSweeps = 0;
+        recentAPs.clear();
+        recentUniqueAPs.clear();
+        memset(channelCountsSweep, 0, sizeof(channelCountsSweep));
+        memset(channelCountsSession, 0, sizeof(channelCountsSession));
+        memset(channelCountsUnique, 0, sizeof(channelCountsUnique));
+        channelViewMode = 0;
+        gps = GPSData();
+        bootTime = 0;
+        startScanTime = 0;
+        lastScanTime = 0;
+        lastFlushTime = 0;
+        lastDisplayUpdate = 0;
+        lastDashCUpdate = 0;
+        lastDashDUpdate = 0;
+        lastDashEUpdate = 0;
+        lastDashFUpdate = 0;
+        lastSystemStatsLog = 0;
+        lastBatteryCheck = 0;
+        lowBatteryWarnStart = 0;
+        lastGeofenceBeep = 0;
+        lastBatteryLevel = -1;
+    }
 };
 
 // ── Application State ───────────────────────────────────────────────────────

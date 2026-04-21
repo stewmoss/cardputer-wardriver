@@ -122,6 +122,7 @@ Shows battery level, RAM usage, and sound status. This data is read once when yo
 - **Battery %** — colour-coded: green (>50%), yellow (20–50%), red (<20%)
 - **Total / Free RAM** — heap + PSRAM in KB
 - **Sound** — ON (green) or MUTED (red)
+- **Model / Src** — active hardware profile and whether it came from auto-detect or a manual model override
 
 ---
 
@@ -134,7 +135,6 @@ The front LED changes colour based on device state:
 | **Yellow** | Searching for GPS satellites |
 | **Blue** | WiFi scan in progress |
 | **Green** | Ready — GPS locked, between scan cycles |
-| **Dim Blue** | Scanning stopped (X key) |
 | **Purple** | Config Mode active |
 | **Red** | Error or low battery warning |
 | **Off** | Shutdown complete |
@@ -145,11 +145,11 @@ See the full [LED Indicator](led-indicator.md) guide for brightness settings and
 
 ## Battery Monitoring
 
-Battery level is checked every 60 seconds and shown in the footer of all dashboard views as **B=XX%** (or **B=---** during the first minute after boot).
+Battery level is checked at startup and then every 60 seconds, and shown in the footer of all dashboard views as **B=XX%**.
 
 ### Low Battery Auto-Shutdown
 
-When battery drops to or below the `low_battery_threshold` (default: 5%), a 10-second countdown appears. The LED turns red and the keyboard is locked. After the countdown, logs are flushed, the SD card is unmounted, and the shutdown summary is displayed.
+When battery drops to or below the `low_battery_threshold` (default: 5%), a 60-second countdown appears. The LED turns red and the keyboard is locked. After the countdown, logs are flushed, the SD card is unmounted, and the shutdown summary is displayed.
 
 Set `low_battery_threshold` to `0` in config to disable this feature.
 
@@ -166,9 +166,8 @@ A short beep plays each time a **new unique AP** (previously unseen BSSID) is di
 
 ## Stop/Start Scanning (X Key)
 
-Press **X** to completely stop the WiFi radio and GPS. The device enters a low-power idle state:
+Press **X** to completely stop the WiFi radio. The device enters a low-power idle state:
 
-- LED turns dim blue
 - Dashboard A shows a red **STOPPED** overlay
 - Current CSV file is flushed and closed
 
@@ -239,7 +238,7 @@ The original hardware MAC is automatically restored on reboot.
 - Saved to `/wardriver/wardriving_NNN.csv` (new file each boot or after stop/start)
 - Format: WiGLE CSV v1.6 — upload directly to [wigle.net/uploads](https://wigle.net/uploads)
 - Every detected network is logged every scan cycle
-- A 10 KB write buffer batches SD writes (auto-flushes every 5 s or at 80% full)
+- The open CSV file is flushed periodically during operation and again on stop, pause, and shutdown
 
 ### Uploading to WiGLE
 

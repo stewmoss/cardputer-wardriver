@@ -1,5 +1,6 @@
 #include "WebPortal.h"
 #include "Logger.h"
+#include "HardwareProfile.h"
 #include <WiFi.h>
 #include <SD.h>
 
@@ -122,6 +123,16 @@ void WebPortal::handleSave()
         return;
 
     AppConfig &config = configManager->getConfig();
+
+    // Device model selection
+    if (server.hasArg("device_model"))
+    {
+        String m = server.arg("device_model");
+        if (m == "auto" || m == "cardputer" || m == "cardputer_adv")
+        {
+            config.device.model = m;
+        }
+    }
 
     // GPS settings
     if (server.hasArg("gps_tx"))
@@ -361,12 +372,28 @@ void WebPortal::handleSave()
     // Web authentication settings
     if (server.hasArg("admin_user"))
         config.web.admin_user = server.arg("admin_user");
+
     if (server.hasArg("admin_pass"))
     {
         String newPass = server.arg("admin_pass");
         if (newPass.length() > 0)
         {
             config.web.admin_pass = newPass;
+        }
+    }
+
+     // Reseed profile-driven pin defaults only when the submitted form includes
+     // a device model update. This avoids overwriting manual GPS pin overrides
+     // when the user saves unrelated settings, especially for older configs
+     // where detected_model may be empty or missing.
+     if (server.hasArg("device_model"))
+     {
+        CardputerModel detected = detectCardputerModel();
+        CardputerModel effective = configManager->effectiveModel(detected);
+        const HardwareProfile &profile = getProfile(effective);
+        if (configManager->reseedFromProfile(profile, effective))
+        {
+            logger.debugPrintln("[WebPortal] Hardware profile changed — reseeded pin defaults");
         }
     }
 
@@ -497,6 +524,83 @@ void WebPortal::sendHTMLChunked()
     html += F("<h1>Cardputer Wardriver</h1>\n<div class=\"ver\">Firmware v");
     html += FIRMWARE_VERSION;
     html += F("</div>\n<form method=\"POST\" action=\"/save\">\n");
+
+    // --- Device section (first) ---
+    {
+        CardputerModel detected = detectCardputerModel();
+        CardputerModel effective = configManager->effectiveModel(detected);
+        const char *detectedName = (detected == MODEL_UNKNOWN) ? "Unknown"
+                                                               : getProfile(detected).model_name;
+        const char *effectiveName = getProfile(effective).model_name;
+
+        html += F("<div class=\"section\">\n<h2>Device</h2>\n"
+                  "<label for=\"device_model\">Hardware Model</label>\n"
+                  "<select id=\"device_model\" name=\"device_model\" "
+                  "style=\"width:100%;padding:8px;background:#0f0f23;border:1px solid #444;"
+                  "border-radius:4px;color:#e0e0e0;font-size:0.95em;margin-bottom:12px\">");
+        const char *modelKeys[]   = {"auto",                    "cardputer",          "cardputer_adv"};
+        const char *modelLabels[] = {"Auto-detect (recommended)", "Cardputer (v1.1)", "Cardputer ADV"};
+        for (int i = 0; i < 3; i++)
+        {
+            html += F("<option value=\"");
+            html += modelKeys[i];
+            html += F("\"");
+            if (cfg.device.model == modelKeys[i])
+                html += F(" selected");
+            html += F(">");
+            html += modelLabels[i];
+            html += F("</option>");
+        }
+        html += F("</select>\n"
+                  "<div class=\"hint\">Detected: <b>");
+        html += detectedName;
+        html += F("</b> &middot; Active: <b>");
+        html += effectiveName;
+        html += F("</b></div>\n");
+
+        // Show each profile's default GPS pins and wire up a small script
+        // that auto-resets the GPS TX/RX inputs when the model changes.
+        const HardwareProfile &pCard = getProfile(MODEL_CARDPUTER);
+        const HardwareProfile &pAdv  = getProfile(MODEL_CARDPUTER_ADV);
+        html += F("<div class=\"hint\">Default GPS pins &mdash; "
+                  "Cardputer (v1.1): TX=<b>");
+        html += String(pCard.gps_tx_pin);
+        html += F("</b> RX=<b>");
+        html += String(pCard.gps_rx_pin);
+        html += F("</b> &middot; Cardputer ADV: TX=<b>");
+        html += String(pAdv.gps_tx_pin);
+        html += F("</b> RX=<b>");
+        html += String(pAdv.gps_rx_pin);
+        html += F("</b></div>\n"
+                  "<div class=\"hint\" style=\"color:#e0b040\">&#9888; Changing this "
+                  "will reset the GPS TX/RX pin fields below to the selected "
+                  "profile's defaults.</div>\n"
+                  "<script>\n(function(){\n"
+                  "var defaults={"
+                  "'cardputer':{tx:");
+        html += String(pCard.gps_tx_pin);
+        html += F(",rx:");
+        html += String(pCard.gps_rx_pin);
+        html += F("},'cardputer_adv':{tx:");
+        html += String(pAdv.gps_tx_pin);
+        html += F(",rx:");
+        html += String(pAdv.gps_rx_pin);
+        html += F("}};\n"
+                  "var autoKey='");
+        html += modelKey(effective);
+        html += F("';\n"
+                  "var sel=document.getElementById('device_model');\n"
+                  "var tx=document.getElementById('gps_tx');\n"
+                  "var rx=document.getElementById('gps_rx');\n"
+                  "if(!sel||!tx||!rx)return;\n"
+                  "sel.addEventListener('change',function(){\n"
+                  "var k=sel.value==='auto'?autoKey:sel.value;\n"
+                  "var d=defaults[k];if(!d)return;\n"
+                  "tx.value=d.tx;rx.value=d.rx;\n"
+                  "});\n"
+                  "})();\n</script>\n"
+                  "</div>\n");
+    }
 
     // --- GPS section ---
     html += F("<div class=\"section\">\n<h2>GPS Settings</h2>\n<div class=\"row\">\n<div>\n"

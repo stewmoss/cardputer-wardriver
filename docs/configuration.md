@@ -21,9 +21,14 @@ Here's the full config with default values. Each section is explained in detail 
 
 ```json
 {
+    "device": {
+        "model": "auto",
+        "detected_model": ""
+    },
     "gps": {
         "tx_pin": 2,
         "rx_pin": 1,
+        "baud": 115200,
         "accuracy_threshold_meters": 500,
         "gmt_offset_hours": 0,
         "gps_log_mode": "fix_only"
@@ -70,12 +75,24 @@ Here's the full config with default values. Each section is explained in detail 
 
 ---
 
+## Device Settings
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `model` | string | `"auto"` | Hardware profile selection. Valid values: `"auto"`, `"cardputer"`, `"cardputer_adv"`. |
+| `detected_model` | string | `""` | Runtime-populated record of the detected or effective hardware model. Normally read-only from the user's perspective. |
+
+When `model` changes, the firmware can reseed profile-driven defaults such as GPS TX/RX pins to match the selected hardware profile.
+
+---
+
 ## GPS Settings
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `tx_pin` | int | `2` | GPIO pin connected to the GPS module's TX line |
 | `rx_pin` | int | `1` | GPIO pin connected to the GPS module's RX line |
+| `baud` | int | `115200` | GPS UART baud rate. The firmware default is `115200`; `57600` is also commonly used for compatible modules. |
 | `accuracy_threshold_meters` | float | `500` | Maximum HDOP value for logging. Scans are skipped when accuracy is worse than this. Lower = stricter. |
 | `gmt_offset_hours` | int | `0` | Your timezone offset from UTC (e.g., `-5` for EST, `10` for AEST). Affects timestamps in debug logs and on SD card files. Range: -12 to +14. |
 | `gps_log_mode` | string | `"fix_only"` | What to do when GPS fix is lost — see below |

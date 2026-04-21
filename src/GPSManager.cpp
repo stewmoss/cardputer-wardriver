@@ -16,17 +16,17 @@ GPSManager::GPSManager()
     lastKnownFix.dateTime = "0000-00-00 00:00:00";
 }
 
-void GPSManager::begin(int txPin, int rxPin, bool superDebugEnabled)
+void GPSManager::begin(int txPin, int rxPin, int baud, bool superDebugEnabled)
 {
     superDebug = superDebugEnabled;
     // ESP32 HardwareSerial::begin(baud, config, rxPin, txPin)
     // Note: the ESP32 API takes RX pin first, then TX pin
     gpsSerial = &Serial1;
-    gpsSerial->begin(DEFAULT_GPS_BAUD, SERIAL_8N1, rxPin, txPin);
+    gpsSerial->begin(baud, SERIAL_8N1, rxPin, txPin);
     initialized = true;
 
     logger.debugPrintln(String("[GPS] Initialized on TX=") + String(txPin) +
-                        " RX=" + String(rxPin) + " @ " + String(DEFAULT_GPS_BAUD));
+                        " RX=" + String(rxPin) + " @ " + String(baud));
 }
 
 void GPSManager::update()

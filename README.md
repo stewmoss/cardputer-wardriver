@@ -6,6 +6,7 @@ Turn your [M5Stack Cardputer](https://shop.m5stack.com/products/m5stack-cardpute
 
 ## Highlights
 
+- **Cardputer ADV support** — auto-detects and selects the default GPS pinouts for both Cardputer v1.1 and ADV models
 - **Active & passive scanning** — per-channel hop or all-channel sweep with configurable dwell times
 - **Three GPS logging modes** — strict fix-only, zero-GPS (log without coordinates), or last-known (reuse stale position)
 - **Six live dashboards** — summary, security snapshot, live AP feed, new AP discovery, channel activity map, and system info — all flicker-free
