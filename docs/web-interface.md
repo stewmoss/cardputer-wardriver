@@ -31,6 +31,16 @@ The Cardputer's screen shows the AP name and IP address while Config Mode is act
 
 The config page is a single dark-themed page with all your settings. Here's what each section contains:
 
+### Device
+
+| Field | What it does | Default |
+|-------|--------------|---------|
+| Hardware Model | Select the hardware profile: `Auto-detect`, `Cardputer (v1.1)`, or `Cardputer ADV` | Auto-detect |
+| Detected | Read-only display of the currently detected board model | Runtime value |
+| Active | Read-only display of the effective hardware profile in use | Runtime value |
+
+Changing the hardware model resets the GPS TX/RX fields below to the selected profile's default pins. The portal also shows the default GPS pins for both supported models.
+
 ### GPS Settings
 
 | Field | What to enter | Default |
@@ -106,8 +116,9 @@ The config page is a single dark-themed page with all your settings. Here's what
 
 Click **Save & Reboot** at the bottom of the page. The device will:
 1. Write all settings to `/wardriver/wardriverconfig.txt` on the SD card
-2. Show a confirmation message
-3. Automatically reboot after 3 seconds with the new settings
+2. Apply any hardware-profile reseeding needed for the selected model
+3. Show a confirmation message
+4. Automatically reboot after 3 seconds with the new settings
 
 ---
 

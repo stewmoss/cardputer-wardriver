@@ -103,6 +103,7 @@ void WiFiScanner::initValues()
     fullScanActive = false;
     scanFailureCount = 0;
     scansSinceLastMacChange = 0;
+    sweepResults.clear();
 }
 
 void WiFiScanner::setMacRandomizeConfig(int interval, bool spoofOUI)
@@ -154,7 +155,6 @@ void WiFiScanner::randomizeMAC()
 
     if (superDebug)
     {
-        // TODO Super Debug
         char buf[128];
         snprintf(buf, sizeof(buf),
                  "[WiFiScanner] MAC randomized to %02x:%02x:%02x:%02x:%02x:%02x (err=%d)",
@@ -229,10 +229,37 @@ bool WiFiScanner::stopScanning()
 {
     if (sweepInProgress || channelScanActive || fullScanActive)
     {
+        // Abort any in-flight IDF scan. WiFi.scanDelete() alone only frees the
+        // cached AP list; it does NOT stop a running scan. Without scan_stop()
+        // the IDF scan completes in the background and leaves the Arduino
+        // WiFiScanClass state out of sync with our flags, which breaks the
+        // next startFullScan()/isFullScanComplete() cycle.
+        esp_err_t stopErr = esp_wifi_scan_stop();
+
+        // Drain any pending SCAN_DONE so Arduino's internal state converges
+        // before we clear the cache.
+        unsigned long t0 = millis();
+        int finalArduinoState = WiFi.scanComplete();
+        while (finalArduinoState == WIFI_SCAN_RUNNING && (millis() - t0) < 150UL)
+        {
+            delay(5);
+            finalArduinoState = WiFi.scanComplete();
+        }
+
         WiFi.scanDelete();
         sweepInProgress = false;
         channelScanActive = false;
         fullScanActive = false;
+        sweepResults.clear();
+
+        if (superDebug)
+        {
+            char buf[160];
+            snprintf(buf, sizeof(buf),
+                     "[WiFiScanner] stopScanning: esp_wifi_scan_stop err=%d drain_ms=%lu final_arduino_state=%d",
+                     (int)stopErr, (unsigned long)(millis() - t0), finalArduinoState);
+            logger.debugPrintln(buf);
+        }
 
         logger.debugPrintln("[WiFiScanner] Scanning stopped");
 
@@ -251,6 +278,25 @@ void WiFiScanner::startFullScan()
 
     sweepResults.clear();
     scanFailureCount = 0;
+
+    // Re-sync Arduino's WiFiScanClass state. startFullScan() calls
+    // esp_wifi_scan_start() directly (not WiFi.scanNetworks()), so Arduino's
+    // internal scan state machine is never reset by us. If a previous scan
+    // left stale state (e.g. after a user stop/start cycle), WiFi.scanComplete()
+    // will return stale values and we will either log ghost APs or treat every
+    // future scan as instantly-complete with 0 APs. Calling scanDelete() here
+    // forces Arduino's state back to a known-empty baseline before we kick
+    // off the IDF scan.
+    WiFi.scanDelete();
+
+    if (superDebug)
+    {
+        char dbg[160];
+        snprintf(dbg, sizeof(dbg),
+                 "[WiFiScanner] startFullScan entry: arduinoScanComplete=%d heap_free=%u",
+                 WiFi.scanComplete(), (unsigned)ESP.getFreeHeap());
+        logger.debugPrintln(dbg);
+    }
 
     // int result = WiFi.scanNetworks(true, true, passiveMode, dwellTimeMs);
 
@@ -274,27 +320,29 @@ void WiFiScanner::startFullScan()
 
     config.home_chan_dwell_time = 0;
     // This call is ultimately called by WiFi.scanNetworks() internally.
-    int result = esp_wifi_scan_start(&config, false);
+    esp_err_t result = esp_wifi_scan_start(&config, false);
 
-    if (result == WIFI_SCAN_FAILED)
+    if (result != ESP_OK)
+    {
+        // Any non-ESP_OK return means the scan did not start. Do NOT set
+        // fullScanActive = true or the state machine will wait forever for a
+        // completion that never comes.
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 "[WiFiScanner] Failed to start full scan: err=%d",
+                 (int)result);
+        logger.debugPrintln(buf);
+        fullScanActive = false;
+        return;
+    }
+
+    if (superDebug)
     {
         char buf[128];
         snprintf(buf, sizeof(buf),
-                 "[WiFiScanner] Failed to start full scan: error %d",
-                 result);
+                 "[WiFiScanner] Started full scan result: %d",
+                 (int)result);
         logger.debugPrintln(buf);
-    }
-    else
-    {
-        if (superDebug)
-        {
-            // TODO Super Debug
-            char buf[128];
-            snprintf(buf, sizeof(buf),
-                     "[WiFiScanner] Started full scan result: %d",
-                     result);
-            logger.debugPrintln(buf);
-        }
     }
 
     sweepStartTime = millis();
@@ -309,21 +357,41 @@ bool WiFiScanner::isFullScanComplete()
 
     int result = WiFi.scanComplete();
 
+    if (superDebug)
+    {
+        static unsigned long lastPollLog = 0;
+        unsigned long nowMs = millis();
+        if (nowMs - lastPollLog > 1000UL)
+        {
+            char dbg[128];
+            snprintf(dbg, sizeof(dbg),
+                     "[WiFiScanner] poll scanComplete=%d elapsed=%lums fullScanActive=%d",
+                     result, nowMs - sweepStartTime, fullScanActive);
+            logger.debugPrintln(dbg);
+            lastPollLog = nowMs;
+        }
+    }
+
     if (result == WIFI_SCAN_RUNNING || result == WIFI_SCAN_FAILED)
     {
         // Timeout: if stuck for > 10 seconds, force-reset
         if (millis() - sweepStartTime > 10000UL)
         {
+            // Abort the IDF scan too; scanDelete() alone does not stop it.
+            esp_err_t stopErr = esp_wifi_scan_stop();
             WiFi.scanDelete();
             fullScanActive = false;
-            logger.debugPrintln("[WiFiScanner] Full scan hard timeout — resetting");
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                     "[WiFiScanner] Full scan hard timeout — resetting (stop err=%d)",
+                     (int)stopErr);
+            logger.debugPrintln(buf);
         }
         return false;
     }
 
     if (superDebug)
     {
-        // TODO Super Debug
         unsigned long elapsed = millis() - sweepStartTime;
         char buf[96];
         snprintf(buf, sizeof(buf),

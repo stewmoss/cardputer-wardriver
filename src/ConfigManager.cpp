@@ -38,8 +38,12 @@ ConfigManager::ConfigManager()
 
 void ConfigManager::setDefaults()
 {
+    config.device.model = DEFAULT_DEVICE_MODEL;
+    config.device.detected_model = "";
+
     config.gps.tx_pin = DEFAULT_GPS_TX;
     config.gps.rx_pin = DEFAULT_GPS_RX;
+    config.gps.baud = DEFAULT_GPS_BAUD;
     config.gps.accuracy_threshold_meters = DEFAULT_ACCURACY_THRESHOLD;
     config.gps.gmt_offset_hours = DEFAULT_GMT_OFFSET_HOURS;
     config.gps.gps_log_mode = DEFAULT_GPS_LOG_MODE;
@@ -107,12 +111,36 @@ bool ConfigManager::loadConfig(const char *filename)
         return false;
     }
 
+    // Device config
+    JsonObject device = doc["device"];
+    if (device)
+    {
+        if (device["model"].is<const char *>())
+        {
+            String m = device["model"].as<String>();
+            if (m == "auto" || m == "cardputer" || m == "cardputer_adv")
+            {
+                config.device.model = m;
+            }
+            else
+            {
+                config.device.model = DEFAULT_DEVICE_MODEL;
+                logger.debugPrintln("[Config] Unknown device.model '" + m + "', using default");
+            }
+        }
+        if (device["detected_model"].is<const char *>())
+        {
+            config.device.detected_model = device["detected_model"].as<String>();
+        }
+    }
+
     // GPS config
     JsonObject gps = doc["gps"];
     if (gps)
     {
         config.gps.tx_pin = gps["tx_pin"] | DEFAULT_GPS_TX;
         config.gps.rx_pin = gps["rx_pin"] | DEFAULT_GPS_RX;
+        config.gps.baud = gps["baud"] | DEFAULT_GPS_BAUD;
         config.gps.accuracy_threshold_meters = gps["accuracy_threshold_meters"] | DEFAULT_ACCURACY_THRESHOLD;
         config.gps.gmt_offset_hours = gps["gmt_offset_hours"] | DEFAULT_GMT_OFFSET_HOURS;
         if (gps["gps_log_mode"].is<const char *>())
@@ -252,10 +280,16 @@ bool ConfigManager::saveConfig(const char *filename)
 {
     DynamicJsonDocument doc(3072);
 
+    // Device
+    JsonObject device = doc.createNestedObject("device");
+    device["model"] = config.device.model;
+    device["detected_model"] = config.device.detected_model;
+
     // GPS
     JsonObject gps = doc.createNestedObject("gps");
     gps["tx_pin"] = config.gps.tx_pin;
     gps["rx_pin"] = config.gps.rx_pin;
+    gps["baud"] = config.gps.baud;
     gps["accuracy_threshold_meters"] = config.gps.accuracy_threshold_meters;
     gps["gmt_offset_hours"] = config.gps.gmt_offset_hours;
     gps["gps_log_mode"] = config.gps.gps_log_mode;
@@ -329,5 +363,55 @@ bool ConfigManager::saveConfig(const char *filename)
     file.close();
 
     logger.debugPrintln("[Config] Config saved successfully");
+    return true;
+}
+
+CardputerModel ConfigManager::effectiveModel(CardputerModel detected) const
+{
+    CardputerModel selected = parseModelKey(config.device.model);
+    if (selected != MODEL_UNKNOWN)
+    {
+        return selected;
+    }
+    // "auto" — use detection; fall back to Cardputer if detection failed.
+    return (detected != MODEL_UNKNOWN) ? detected : MODEL_CARDPUTER;
+}
+
+bool ConfigManager::reseedFromProfile(const HardwareProfile &profile, CardputerModel effective)
+{
+    String newKey = modelKey(effective);
+    if (config.device.detected_model == newKey)
+    {
+        return false; // No change — preserve user overrides.
+    }
+
+    if (config.device.detected_model.length() == 0)
+    {
+        // Older configs may not have detected_model. Initialize the tracking
+        // field without reseeding profile-driven GPS settings so existing
+        // user overrides are preserved on the first save after upgrade.
+        config.device.detected_model = newKey;
+        logger.debugPrintln(String("[Config] Initialized detected_model to '") + newKey +
+                            "' without reseeding GPS settings");
+        return false;
+    }
+
+    int oldTx = config.gps.tx_pin;
+    int oldRx = config.gps.rx_pin;
+    int oldBaud = config.gps.baud;
+
+    // Only profile-driven fields are reseeded. Other user-configurable
+    // settings (buzzer freq, brightness, scanning, etc.) are preserved.
+    config.gps.tx_pin = profile.gps_tx_pin;
+    config.gps.rx_pin = profile.gps_rx_pin;
+    config.gps.baud = profile.gps_default_baud;
+
+    config.device.detected_model = newKey;
+
+    logger.debugPrintln(String("[Config] Profile reseed for model '") + newKey + "'");
+    logger.debugPrintln(String("[Config]   gps.tx_pin: ") + oldTx + " -> " + config.gps.tx_pin);
+    logger.debugPrintln(String("[Config]   gps.rx_pin: ") + oldRx + " -> " + config.gps.rx_pin);
+    logger.debugPrintln(String("[Config]   gps.baud:   ") + oldBaud + " -> " + config.gps.baud);
+
     return true;
 }

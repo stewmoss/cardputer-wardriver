@@ -10,7 +10,7 @@ class Display
 public:
     Display();
     void begin();
-    void showStartup();
+    void showStartup(const char *modelName = nullptr, const char *source = nullptr);
     void showConfigMode(const String &ipAddress);
     void showSearchingSats(const GPSData &gps, int uniqueAPs, int lastScanCount);
     void showMonitoring();
@@ -47,7 +47,9 @@ public:
                           const uint32_t sessionCounts[13],
                           const uint32_t uniqueCounts[13],
                           uint8_t viewMode);
-    void updateDashboardF(bool soundMuted);
+    void updateDashboardF(bool soundMuted,
+                          const char *modelName = nullptr,
+                          const char *source = nullptr);
 
 private:
     DisplayView currentView;

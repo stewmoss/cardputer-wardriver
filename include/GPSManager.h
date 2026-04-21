@@ -9,7 +9,7 @@ class GPSManager
 {
 public:
     GPSManager();
-    void begin(int txPin, int rxPin, bool superDebugEnabled = false);
+    void begin(int txPin, int rxPin, int baud = DEFAULT_GPS_BAUD, bool superDebugEnabled = false);
     void update();
     GPSData getData();
     GPSData getLastKnownData();

@@ -16,6 +16,7 @@
 #include "AlertManager.h"
 #include "KeyboardHandler.h"
 #include "WebPortal.h"
+#include "HardwareProfile.h"
 
 // ── Global Instances ────────────────────────────────────────────────────────
 ConfigManager configManager;
@@ -32,6 +33,8 @@ KeyboardHandler keyboardHandler;
 AppState currentState = STATE_INIT;
 ScanSession session;
 bool superDebug = false;
+CardputerModel detectedModel = MODEL_UNKNOWN;
+CardputerModel activeModel = MODEL_CARDPUTER;
 
 // ── Battery Monitoring ─────────────────────────────────────────
 static const unsigned long BATTERY_CHECK_INTERVAL_MS = 60000UL;
@@ -66,15 +69,21 @@ void setup()
     auto cfg = M5.config();
     M5Cardputer.begin(cfg, true);
 
+    // 1b. Detect hardware model (after M5 begin, before display to pass to splash)
+    detectedModel = detectCardputerModel();
+
     // 2. Display startup splash (before SD — no SD access)
     // The splash screen only gets the delay() at the end of the setup method, the delay
     // is calculated from splashStart to give the right delay.
     uint32_t splashStart = millis();
     display.begin();
-    display.showStartup();
+    // Splash shows the detected model; active model may differ if the
+    // saved config has a manual override (decided after SD/config load).
+    display.showStartup(getProfile(detectedModel != MODEL_UNKNOWN ? detectedModel : MODEL_CARDPUTER).model_name,
+                       "auto");
 
     Serial.begin(115200);
-    delay(1000); // Wait for USB CDC re-enumeration after reset 
+    delay(1000); // Wait for USB CDC re-enumeration after reset
     Serial.println("\n\n=== M5 Cardputer Wardriver ===");
     Serial.println("Firmware v" FIRMWARE_VERSION);
 
@@ -115,6 +124,40 @@ void setup()
     bool configLoaded = configManager.loadConfig();
     AppConfig &appConfig = configManager.getConfig();
 
+    // 6b. Resolve active hardware model and reseed profile-driven fields
+    //     if the board has changed (e.g. SD card moved between Cardputers).
+    activeModel = configManager.effectiveModel(detectedModel);
+    const HardwareProfile &profile = getProfile(activeModel);
+    const String detectedModelName =
+        (detectedModel == MODEL_UNKNOWN) ? String("") : String(getProfile(detectedModel).model_name);
+    const bool isAutoModel = (appConfig.device.model == "auto");
+    const bool detectedModelChanged = (appConfig.device.detected_model != detectedModelName);
+
+    if (detectedModelChanged)
+    {
+        if (isAutoModel && detectedModel != MODEL_UNKNOWN)
+        {
+            configManager.reseedFromProfile(profile, activeModel);
+        }
+
+        appConfig.device.detected_model = detectedModelName;
+
+        if (!configManager.saveConfig())
+        {
+            Serial.println("Failed to save config after hardware detection update.");
+        }
+    }
+
+    Serial.print("Detected board model: ");
+    Serial.println((detectedModel == MODEL_UNKNOWN) ? "unknown" : getProfile(detectedModel).model_name);
+    Serial.print("Active hardware profile: ");
+    Serial.print(profile.model_name);
+    Serial.print(" (");
+    Serial.print(isAutoModel ? "auto" : "manual");
+    Serial.println(")");
+
+    session.config = appConfig;
+
     // 7. Configure logger with loaded config
     logger.setConfig(&appConfig);
 
@@ -140,7 +183,7 @@ void setup()
 
     // 12. Initialize GPS
     superDebug = appConfig.debug.enabled && appConfig.debug.super_debug_enabled;
-    gpsManager.begin(appConfig.gps.tx_pin, appConfig.gps.rx_pin, superDebug);
+    gpsManager.begin(appConfig.gps.tx_pin, appConfig.gps.rx_pin, appConfig.gps.baud, superDebug);
     dataLogger.setGPSManager(&gpsManager);
 
     // 13. Initialize WiFi scanner
@@ -169,7 +212,7 @@ void setup()
     if (elapsed < 2000)
     {
         delay(2000 - elapsed);
-    }
+    } 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -262,37 +305,33 @@ void handleToggleScanAction()
     }
 
     // Resume scanning — re-init WiFi, open new CSV
+    if (superDebug)
+    {
+        char buf[160];
+        snprintf(buf, sizeof(buf),
+                 "[Resume] pre-resume: isScanning=%d heap_free=%u",
+                 wifiScanner.isScanning(), (unsigned)ESP.getFreeHeap());
+        logger.debugPrintln(buf);
+    }
     wifiScanner.initValues();
-    wifiScanner.configure(configManager.getConfig().scan.scan_mode,
-                          configManager.getConfig().scan.active_dwell_ms,
-                          configManager.getConfig().scan.passive_dwell_ms,
-                          configManager.getConfig().scan.mac_randomize_interval,
-                          configManager.getConfig().scan.mac_spoof_oui,
+    wifiScanner.configure(session.config.scan.scan_mode,
+                          session.config.scan.active_dwell_ms,
+                          session.config.scan.passive_dwell_ms,
+                          session.config.scan.mac_randomize_interval,
+                          session.config.scan.mac_spoof_oui,
                           superDebug);
 
-    if (!dataLogger.begin(SD))
-    {
-        logger.debugPrintln("[Input] ERROR: Failed to open new log file on resume");
-        display.showError("Log file open failed!");
-        currentState = STATE_ERROR;
-        alertManager.setStatusError();
-        return;
-    }
-    logger.debugPrintln(String("[Input] Resumed scanning: new file: ") + dataLogger.getActiveFilename());
-
-    alertManager.setStatusReady();
-    alertManager.soundStart();
-    session.lastScanTime = 0; // Trigger scan immediately
-    session.lastDisplayUpdate = 0;
     session.loggingPaused = false;
     session.scanStopped = false;
 
+    enterActiveScanState();
+
+    alertManager.setStatusReady();
+    alertManager.soundStart();
     if (superDebug)
     {
         logger.debugPrintln("[Input] 'x' pressed: scan RESUMED");
     }
-
-    enterActiveScanState();
 }
 
 void handleTogglePauseAction()
@@ -358,7 +397,7 @@ void executeKeyAction(KeyAction action)
         return;
 
     case KEY_ACTION_TOGGLE_BLANK:
-        display.toggleBlank(configManager.getConfig().hardware.screen_brightness);
+        display.toggleBlank(session.config.hardware.screen_brightness);
         if (currentState == STATE_SHUTDOWN)
         {
             logger.debugPrintln(display.isBlank() ? "[Shutdown] 'b' pressed: display off" : "[Shutdown] 'b' pressed: display on");
@@ -429,7 +468,7 @@ void executeKeyAction(KeyAction action)
         {
             session.channelViewMode = (session.channelViewMode + 1) % 3;
             session.lastDashEUpdate = 0;
-            const char* modeNames[] = {"SESSION", "SWEEP", "UNIQUE"};
+            const char *modeNames[] = {"SESSION", "SWEEP", "UNIQUE"};
             char buf[64];
             snprintf(buf, sizeof(buf), "[Input] Space: channel view -> %s mode", modeNames[session.channelViewMode]);
             logger.debugPrintln(buf);
@@ -455,7 +494,6 @@ void enterSearchingSatellitesState()
 
 void handleSearchingSatellites()
 {
-    AppConfig &config = configManager.getConfig();
     unsigned long now = millis();
 
     // Update GPS
@@ -463,13 +501,13 @@ void handleSearchingSatellites()
 
     // Check if we have a valid 3D fix with acceptable accuracy
     session.gps = gpsManager.getData();
-    if (session.gps.has3DFix && session.gps.accuracy <= config.gps.accuracy_threshold_meters)
+    if (session.gps.has3DFix && session.gps.accuracy <= session.config.gps.accuracy_threshold_meters)
     {
 
         // Sync system time from GPS on first fix
         if (!gpsManager.isTimeSynced())
         {
-            gpsManager.syncSystemTime(config.gps.gmt_offset_hours);
+            gpsManager.syncSystemTime(session.config.gps.gmt_offset_hours);
             logger.debugPrintln("Time set");
         }
         logger.debugPrintln("GPS fix acquired with accuracy " + String(session.gps.accuracy) + "m");
@@ -487,8 +525,8 @@ void handleSearchingSatellites()
 
     // Periodic geofence area beep (every 10 seconds)
     if (session.gps.isValid && session.gps.has3DFix &&
-        session.gps.accuracy <= config.gps.accuracy_threshold_meters &&
-        !config.filter.geofence_boxes.empty() &&
+        session.gps.accuracy <= session.config.gps.accuracy_threshold_meters &&
+        !session.config.filter.geofence_boxes.empty() &&
         (now - session.lastGeofenceBeep >= GEOFENCE_BEEP_INTERVAL_MS))
     {
         if (geofenceFilter.isInsideGeofence(session.gps.lat, session.gps.lng))
@@ -526,7 +564,6 @@ void enterActiveScanState()
 
 void handleActiveScan()
 {
-    AppConfig &config = configManager.getConfig();
     unsigned long now = millis();
 
     // ── G0 button: drop FLAG marker entry ────────────────────────────────
@@ -564,9 +601,9 @@ void handleActiveScan()
                     wifiScanner.getUniqueCount(),
                     dataLogger.getTotalLogged(),
                     now - session.bootTime,
-                    config.gps.accuracy_threshold_meters,
+                    session.config.gps.accuracy_threshold_meters,
                     true, session.loggingPaused,
-                    config.gps.gps_log_mode);
+                    session.config.gps.gps_log_mode);
                 session.lastDisplayUpdate = now;
             }
         }
@@ -611,7 +648,9 @@ void handleActiveScan()
         {
             if (now - session.lastDashFUpdate >= 2000UL)
             {
-                display.updateDashboardF(alertManager.isMuted());
+                display.updateDashboardF(alertManager.isMuted(),
+                                         getProfile(activeModel).model_name,
+                                         session.config.device.model == "auto" ? "auto" : "manual");
                 session.lastDashFUpdate = now;
             }
         }
@@ -622,7 +661,7 @@ void handleActiveScan()
     }
 
     // Start a new sweep after the inter-sweep delay
-    if (!wifiScanner.isScanning() && (now - session.lastScanTime >= (unsigned long)config.scan.scan_delay_ms))
+    if (!wifiScanner.isScanning() && (now - session.lastScanTime >= (unsigned long)session.config.scan.scan_delay_ms))
     {
         if (wifiScanner.isAllChannelMode())
         {
@@ -643,7 +682,7 @@ void handleActiveScan()
     // Is it time to sync system time from GPS again?
     if (!gpsManager.isTimeSynced())
     {
-        gpsManager.syncSystemTime(config.gps.gmt_offset_hours);
+        gpsManager.syncSystemTime(session.config.gps.gmt_offset_hours);
     }
 
     // Drive the scan state machine
@@ -686,7 +725,7 @@ void handleActiveScan()
 
         // Log each network that passes filters (skip when logging is paused)
         // Determine GPS data to use based on gps_log_mode
-        const String &gpsLogMode = config.gps.gps_log_mode;
+        const String &gpsLogMode = session.config.gps.gps_log_mode;
         bool shouldLog = false;
         GPSData logGps = session.gps;
 
@@ -793,8 +832,8 @@ void handleActiveScan()
 
     // Periodic geofence area beep (every 10 seconds)
     if (session.gps.isValid && session.gps.has3DFix &&
-        session.gps.accuracy <= config.gps.accuracy_threshold_meters &&
-        !config.filter.geofence_boxes.empty() &&
+        session.gps.accuracy <= session.config.gps.accuracy_threshold_meters &&
+        !session.config.filter.geofence_boxes.empty() &&
         (now - session.lastGeofenceBeep >= GEOFENCE_BEEP_INTERVAL_MS))
     {
         if (geofenceFilter.isInsideGeofence(session.gps.lat, session.gps.lng))
@@ -816,9 +855,9 @@ void handleActiveScan()
                 wifiScanner.getUniqueCount(),
                 dataLogger.getTotalLogged(),
                 now - session.bootTime,
-                config.gps.accuracy_threshold_meters,
+                session.config.gps.accuracy_threshold_meters,
                 session.scanStopped, session.loggingPaused,
-                config.gps.gps_log_mode);
+                session.config.gps.gps_log_mode);
             session.lastDisplayUpdate = now;
         }
     }
@@ -863,7 +902,9 @@ void handleActiveScan()
     {
         if (now - session.lastDashFUpdate >= 2000UL)
         {
-            display.updateDashboardF(alertManager.isMuted());
+            display.updateDashboardF(alertManager.isMuted(),
+                                     getProfile(activeModel).model_name,
+                                     session.config.device.model == "auto" ? "auto" : "manual");
             session.lastDashFUpdate = now;
         }
     }
@@ -874,7 +915,7 @@ void handleActiveScan()
 // ═══════════════════════════════════════════════════════════════════════════
 void enterShutdownState(bool lowBattery)
 {
-    display.ensureUnblanked(configManager.getConfig().hardware.screen_brightness);
+    display.ensureUnblanked(session.config.hardware.screen_brightness);
     logger.debugPrintln("[Shutdown] Started.");
 
     unsigned long sessionDurationMs = millis() - session.bootTime;
@@ -935,7 +976,7 @@ void checkBattery()
     int level = M5Cardputer.Power.getBatteryLevel();
     display.setBatteryLevel(level);
 
-    int threshold = configManager.getConfig().hardware.low_battery_threshold;
+    int threshold = session.config.hardware.low_battery_threshold;
     if (threshold > 0 && level >= 0 && level <= threshold)
     {
         logger.debugPrintln("[Battery] Below threshold — entering low battery warning");
@@ -979,7 +1020,7 @@ void handleLowBatteryWarning()
 // ═══════════════════════════════════════════════════════════════════════════
 void enterConfigModeState()
 {
-    display.ensureUnblanked(configManager.getConfig().hardware.screen_brightness);
+    display.ensureUnblanked(session.config.hardware.screen_brightness);
     logger.debugPrintln("[State] Entering CONFIG_MODE");
 
     // Close data logger if active
@@ -1074,15 +1115,13 @@ void processCompletedScan()
 
 void logSystemStatsIfDue(unsigned long now)
 {
-    const AppConfig &cfg = configManager.getConfig();
-
     // Only log when debug is enabled and system stats are enabled
-    if (!cfg.debug.enabled || !cfg.debug.system_stats_enabled)
+    if (!session.config.debug.enabled || !session.config.debug.system_stats_enabled)
     {
         return;
     }
 
-    unsigned long intervalMs = (unsigned long)cfg.debug.system_stats_interval_s * 1000UL;
+    unsigned long intervalMs = (unsigned long)session.config.debug.system_stats_interval_s * 1000UL;
     if (session.lastSystemStatsLog != 0 &&
         (now - session.lastSystemStatsLog < intervalMs))
     {
