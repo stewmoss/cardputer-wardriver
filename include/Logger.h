@@ -15,6 +15,8 @@ public:
     void debugPrintln(const char *msg);
     void debugPrintln(const String &msg);
     void debugPrintln();
+    
+    bool logStatsCSV(const String& csvRow);
 
     String getDebugLogFile();
     bool clearDebugLog();

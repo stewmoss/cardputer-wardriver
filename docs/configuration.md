@@ -69,6 +69,18 @@ Here's the full config with default values. Each section is explained in detail 
     "web": {
         "admin_user": "admin",
         "admin_pass": "password"
+    },
+    "upload": {
+        "wigle_upload_enabled": false,
+        "auto_upload": false,
+        "upload_ssid": "",
+        "upload_password": "",
+        "wigle_api_name": "",
+        "wigle_api_token": "",
+        "compress_before_upload": true,
+        "delete_after_upload": false,
+        "min_sweeps_threshold": 20,
+        "retry_thin_files": false
     }
 }
 ```
@@ -90,10 +102,10 @@ When `model` changes, the firmware can reseed profile-driven defaults such as GP
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `tx_pin` | int | `2` | GPIO pin connected to the GPS module's TX line |
-| `rx_pin` | int | `1` | GPIO pin connected to the GPS module's RX line |
+| `tx_pin` | int | `2` | Cardputer/ESP32 TX GPIO connected to the GPS module's RX line |
+| `rx_pin` | int | `1` | Cardputer/ESP32 RX GPIO connected to the GPS module's TX line |
 | `baud` | int | `115200` | GPS UART baud rate. The firmware default is `115200`; `57600` is also commonly used for compatible modules. |
-| `accuracy_threshold_meters` | float | `500` | Maximum HDOP value for logging. Scans are skipped when accuracy is worse than this. Lower = stricter. |
+| `accuracy_threshold_meters` | float | `500` | Maximum GPS accuracy estimate in meters for logging. Scans are skipped when accuracy is worse than this. Lower = stricter. |
 | `gmt_offset_hours` | int | `0` | Your timezone offset from UTC (e.g., `-5` for EST, `10` for AEST). Affects timestamps in debug logs and on SD card files. Range: -12 to +14. |
 | `gps_log_mode` | string | `"fix_only"` | What to do when GPS fix is lost — see below |
 
@@ -237,8 +249,37 @@ Each box has four values: `top_lat` (north), `bottom_lat` (south), `left_lon` (w
 |-----|------|---------|-------------|
 | `enabled` | bool | `false` | Write debug output to `/wardriver/logs/debug.log` on the SD card. Serial output is always active regardless. |
 | `super_debug_enabled` | bool | `false` | Verbose scan-level logging (MAC changes, per-scan timing, channel results). Only works when `enabled` is also `true`. |
-| `system_stats_enabled` | bool | `true` | Periodically log system stats (heap, battery, etc.) |
-| `system_stats_interval_s` | int | `300` | How often to log system stats, in seconds |
+| `system_stats_enabled` | bool | `true` | When `enabled` is also `true`, append structured telemetry to `/wardriver/logs/stats.csv`. Rows include `init`, periodic `run`, `pre_upload`, and `exit` events. |
+| `system_stats_interval_s` | int | `300` | How often to append periodic `run` rows to `stats.csv`, in seconds. Lifecycle rows are written immediately. |
+
+`stats.csv` is separate from the WiGLE `wardriving_*.csv` files. It is for diagnostics and captures timestamp/epoch when available, uptime, heap/PSRAM totals, scan and station counters, battery percentage and millivolts, charging state, internal temperature, CPU frequency, RTOS task data, and maximum loop time since the previous stats row.
+
+---
+
+## Upload Settings
+
+Boot-time WiGLE upload runs before GPS acquisition and WiFi scanning. If the required fields are blank, `wigle_upload_enabled` is `false`, or `auto_upload` is `false`, the firmware skips this state and starts normal wardriving. Manual upload (shutdown screen, `U` key) requires `wigle_upload_enabled` to be `true` regardless of the `auto_upload` setting.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `wigle_upload_enabled` | bool | `false` | Master switch for the WiGLE upload subsystem. When `false`, both boot-time auto-upload and the manual upload option on the shutdown screen are disabled |
+| `auto_upload` | bool | `false` | Enable boot-time upload of pending `/wardriver/wardriving_*.csv` files. Requires `wigle_upload_enabled` to also be `true` |
+| `upload_ssid` | string | `""` | Home WiFi SSID to look for at boot |
+| `upload_password` | string | `""` | Home WiFi password. Leave empty only for an open network |
+| `wigle_api_name` | string | `""` | WiGLE API name for Basic Auth |
+| `wigle_api_token` | string | `""` | WiGLE API token for Basic Auth |
+| `compress_before_upload` | bool | `true` | Wrap CSV files as `.csv.gz` before upload |
+| `delete_after_upload` | bool | `false` | Delete uploaded artifacts instead of moving them to `/wardriver/uploaded/` |
+| `min_sweeps_threshold` | int | `20` | Minimum distinct GPS-timestamp sweeps a CSV must contain to be uploaded. `0` disables the check. Files below the threshold are quarantined to `/wardriver/uploaded/thin/` |
+| `retry_thin_files` | bool | `false` | If `true`, files in `/wardriver/uploaded/thin/` are re-evaluated on the next upload run. Ignored when `min_sweeps_threshold = 0` |
+
+Successfully uploaded files are either moved to `/wardriver/uploaded/` or deleted, depending on `delete_after_upload`. When `compress_before_upload` is enabled, the archived file is the uploaded `.csv.gz`; when it is disabled, the archived file is the original `.csv`. The highest uploaded CSV index may leave a 0-byte placeholder behind so future session filenames keep increasing. Older zero-byte placeholders are cleaned automatically; if the highest root CSV is non-empty, no placeholder is retained.
+
+### Minimum Sweeps Quarantine
+
+A "sweep" is one full pass through the WiFi channel list, identified by a unique `FirstSeen` timestamp in the CSV. Files containing fewer than `min_sweeps_threshold` distinct sweeps (typically very short sessions or sessions without a GPS fix) are skipped and moved to `/wardriver/uploaded/thin/` rather than being uploaded. This keeps WiGLE submissions clean of low-value data.
+
+Set `min_sweeps_threshold` to `0` to disable the check entirely. Set `retry_thin_files` to `true` to give quarantined files another chance on the next upload run (useful after raising or lowering the threshold).
 
 ---
 
@@ -261,5 +302,6 @@ The portal uses HTTP Basic Authentication — your browser will prompt for crede
 |------|-----------|
 | `/wardriver/wardriverconfig.txt` | Your config file (JSON) |
 | `/wardriver/logs/debug.log` | Debug log (when `debug.enabled` is `true`) |
+| `/wardriver/logs/stats.csv` | Structured system stats CSV (when `debug.enabled` and `debug.system_stats_enabled` are both `true`) |
 | `/wardriver/wardriving_001.csv` | First session's WiGLE CSV output |
 | `/wardriver/wardriving_002.csv` | Second session (auto-incrementing) |

@@ -4,6 +4,23 @@
 #include <WiFi.h>
 #include <SD.h>
 
+static String htmlEscape(const String &s)
+{
+    String out;
+    out.reserve(s.length() * 6);
+    for (size_t i = 0; i < s.length(); i++)
+    {
+        char c = s[i];
+        if      (c == '&')  out += F("&amp;");
+        else if (c == '<')  out += F("&lt;");
+        else if (c == '>')  out += F("&gt;");
+        else if (c == '"')  out += F("&quot;");
+        else if (c == '\'') out += F("&#39;");
+        else                out += c;
+    }
+    return out;
+}
+
 WebPortal::WebPortal(ConfigManager *configMgr)
     : configManager(configMgr), server(80), active(false), apMode(true), lastActivity(0)
 {
@@ -369,6 +386,57 @@ void WebPortal::handleSave()
         config.debug.system_stats_interval_s = constrain(v, 30, 3600);
     }
 
+    // Upload settings
+    config.upload.wigle_upload_enabled = server.hasArg("wigle_upload_enabled");
+    config.upload.auto_upload = server.hasArg("auto_upload");
+    if (server.hasArg("upload_ssid"))
+    {
+        String value = server.arg("upload_ssid");
+        value.trim();
+        config.upload.upload_ssid = value.substring(0, 32);
+    }
+    if (server.hasArg("upload_password_clear") && server.arg("upload_password_clear") == "1")
+    {
+        config.upload.upload_password = "";
+    }
+    else if (server.hasArg("upload_password"))
+    {
+        String value = server.arg("upload_password");
+        if (value.length() > 0)
+        {
+            config.upload.upload_password = value.substring(0, 63);
+        }
+    }
+    if (server.hasArg("wigle_api_name"))
+    {
+        String value = server.arg("wigle_api_name");
+        value.trim();
+        config.upload.wigle_api_name = value.substring(0, 64);
+    }
+    if (server.hasArg("wigle_api_token_clear") && server.arg("wigle_api_token_clear") == "1")
+    {
+        config.upload.wigle_api_token = "";
+    }
+    else if (server.hasArg("wigle_api_token"))
+    {
+        String value = server.arg("wigle_api_token");
+        value.trim();
+        if (value.length() > 0)
+        {
+            config.upload.wigle_api_token = value.substring(0, 128);
+        }
+    }
+    config.upload.compress_before_upload = server.hasArg("compress_before_upload");
+    config.upload.delete_after_upload = server.hasArg("delete_after_upload");
+    if (server.hasArg("min_sweeps_threshold"))
+    {
+        long v = server.arg("min_sweeps_threshold").toInt();
+        if (v < 0) v = 0;
+        if (v > 65535) v = 65535;
+        config.upload.min_sweeps_threshold = (uint16_t)v;
+    }
+    config.upload.retry_thin_files = server.hasArg("retry_thin_files");
+
     // Web authentication settings
     if (server.hasArg("admin_user"))
         config.web.admin_user = server.arg("admin_user");
@@ -425,11 +493,24 @@ void WebPortal::handleStatus()
     if (!authenticate())
         return;
 
+    AppConfig &cfg = configManager->getConfig();
+    bool uploadConfigured = cfg.upload.upload_ssid.length() > 0 &&
+                            cfg.upload.wigle_api_name.length() > 0 &&
+                            cfg.upload.wigle_api_token.length() > 0;
+
     String json = "{";
     json += "\"firmware\":\"" FIRMWARE_VERSION "\",";
     json += "\"uptime\":" + String(millis() / 1000) + ",";
     json += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
-    json += "\"sd_mounted\":true";
+    json += "\"sd_mounted\":true,";
+    json += "\"upload\":{";
+    json += "\"enabled\":" + String(cfg.upload.wigle_upload_enabled ? "true" : "false") + ",";
+    json += "\"auto_upload\":" + String(cfg.upload.auto_upload ? "true" : "false") + ",";
+    json += "\"configured\":" + String(uploadConfigured ? "true" : "false") + ",";
+    json += "\"min_sweeps_threshold\":" + String(cfg.upload.min_sweeps_threshold) + ",";
+    json += "\"retry_thin_files\":" + String(cfg.upload.retry_thin_files ? "true" : "false") + ",";
+    json += "\"last_upload_iso\":null";
+    json += "}";
     json += "}";
 
     server.send(200, "application/json", json);
@@ -502,7 +583,7 @@ void WebPortal::sendHTMLChunked()
               ".section{background:#1a1a2e;border:1px solid #333;border-radius:8px;padding:16px;margin-bottom:16px}\n"
               ".section h2{color:#00d4ff;font-size:1.1em;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:6px}\n"
               "label{display:block;margin-bottom:4px;color:#aaa;font-size:0.85em}\n"
-              "input[type=text],input[type=number]{width:100%;padding:8px;background:#0f0f23;border:1px solid #444;\n"
+              "input[type=text],input[type=password],input[type=number]{width:100%;padding:8px;background:#0f0f23;border:1px solid #444;\n"
               "border-radius:4px;color:#e0e0e0;font-size:0.95em;margin-bottom:12px}\n"
               "input[type=number]{width:120px}\n"
               "textarea{width:100%;padding:8px;background:#0f0f23;border:1px solid #444;\n"
@@ -518,6 +599,11 @@ void WebPortal::sendHTMLChunked()
               "button{display:block;width:100%;padding:14px;background:#00d4ff;color:#0f0f23;\n"
               "border:none;border-radius:8px;font-size:1.1em;font-weight:bold;cursor:pointer;margin-top:8px}\n"
               "button:hover{background:#00b8d4}\n"
+              ".secret-row{display:flex;gap:8px;align-items:flex-start}\n"
+              ".secret-row input{flex:1;min-width:0;margin-bottom:8px}\n"
+              "button.secret-clear{display:inline-block;width:auto;min-width:68px;padding:8px 10px;"
+              "margin-top:0;border-radius:4px;font-size:0.9em}\n"
+              ".secret-note{color:#8a8;font-size:0.78em;margin-top:-8px;margin-bottom:12px}\n"
               "</style>\n</head>\n<body>\n");
 
     // --- Title & version ---
@@ -925,11 +1011,97 @@ void WebPortal::sendHTMLChunked()
               "</script>\n"
               "</div>\n\n");
 
+    // --- Upload section ---
+    html += F("<div class=\"section\">\n<h2>Upload</h2>\n"
+              "<div class=\"cb\">\n"
+              "<input type=\"checkbox\" id=\"wigle_upload_enabled\" name=\"wigle_upload_enabled\"");
+    if (cfg.upload.wigle_upload_enabled)
+        html += F(" checked");
+    html += F(">\n<label for=\"wigle_upload_enabled\">Enable WiGLE upload (manual + auto)</label>\n</div>\n"
+              "<div class=\"hint\">Master switch. When off, the manual upload option on the shutdown screen is also disabled.</div>\n"
+              "<div class=\"cb\">\n"
+              "<input type=\"checkbox\" id=\"auto_upload\" name=\"auto_upload\"");
+    if (cfg.upload.auto_upload)
+        html += F(" checked");
+    html += F(">\n<label for=\"auto_upload\">Auto-upload WiGLE CSVs at boot</label>\n</div>\n"
+              "<div class=\"hint\">Runs before GPS and WiFi scanning, only when the configured SSID is visible. Requires WiGLE upload to be enabled.</div>\n"
+              "<label for=\"upload_ssid\">Home WiFi SSID</label>\n"              "<input type=\"text\" id=\"upload_ssid\" name=\"upload_ssid\" maxlength=\"32\" value=\"");
+    html += htmlEscape(cfg.upload.upload_ssid);
+    html += F("\">\n"
+              "<label for=\"upload_password\">Home WiFi Password</label>\n"
+              "<input type=\"hidden\" id=\"upload_password_clear\" name=\"upload_password_clear\" value=\"0\">\n"
+              "<div class=\"secret-row\">\n"
+              "<input type=\"password\" id=\"upload_password\" name=\"upload_password\" maxlength=\"63\" "
+              "value=\"\" placeholder=\"Leave blank to keep saved password\">\n"
+              "<button type=\"button\" class=\"secret-clear\" id=\"upload_password_clear_button\" "
+              "data-field=\"upload_password\" data-clear=\"upload_password_clear\" "
+              "data-note=\"upload_password_note\">Clear</button>\n"
+              "</div>\n"
+              "<div class=\"secret-note\" id=\"upload_password_note\">Leave blank to keep the saved password.</div>\n"
+              "<label for=\"wigle_api_name\">WiGLE API Name</label>\n"
+              "<input type=\"text\" id=\"wigle_api_name\" name=\"wigle_api_name\" maxlength=\"64\" value=\"");
+    html += htmlEscape(cfg.upload.wigle_api_name);
+    html += F("\">\n"
+              "<label for=\"wigle_api_token\">WiGLE API Token</label>\n"
+              "<input type=\"hidden\" id=\"wigle_api_token_clear\" name=\"wigle_api_token_clear\" value=\"0\">\n"
+              "<div class=\"secret-row\">\n"
+              "<input type=\"password\" id=\"wigle_api_token\" name=\"wigle_api_token\" maxlength=\"128\" "
+              "value=\"\" placeholder=\"Leave blank to keep saved token\">\n"
+              "<button type=\"button\" class=\"secret-clear\" id=\"wigle_api_token_clear_button\" "
+              "data-field=\"wigle_api_token\" data-clear=\"wigle_api_token_clear\" "
+              "data-note=\"wigle_api_token_note\">Clear</button>\n"
+              "</div>\n"
+              "<div class=\"secret-note\" id=\"wigle_api_token_note\">Leave blank to keep the saved token.</div>\n"
+              "<div class=\"cb\">\n"
+              "<input type=\"checkbox\" id=\"compress_before_upload\" name=\"compress_before_upload\"");
+    if (cfg.upload.compress_before_upload)
+        html += F(" checked");
+    html += F(">\n<label for=\"compress_before_upload\">Gzip before upload</label>\n</div>\n"
+              "<div class=\"cb\">\n"
+              "<input type=\"checkbox\" id=\"delete_after_upload\" name=\"delete_after_upload\"");
+    if (cfg.upload.delete_after_upload)
+        html += F(" checked");
+    html += F(">\n<label for=\"delete_after_upload\">Delete after successful upload</label>\n</div>\n"
+              "<div class=\"hint\">When disabled, uploaded artifacts are moved to /wardriver/uploaded/.</div>\n"
+              "<label for=\"min_sweeps_threshold\">Minimum sweeps to upload</label>\n"
+              "<input type=\"number\" id=\"min_sweeps_threshold\" name=\"min_sweeps_threshold\" min=\"0\" max=\"65535\" step=\"1\" value=\"");
+    html += String(cfg.upload.min_sweeps_threshold);
+    html += F("\">\n"
+              "<div class=\"hint\">Files with fewer distinct sweep timestamps are quarantined to /wardriver/uploaded/thin instead of being uploaded. Set 0 to disable.</div>\n"
+              "<div class=\"cb\">\n"
+              "<input type=\"checkbox\" id=\"retry_thin_files\" name=\"retry_thin_files\"");
+    if (cfg.upload.retry_thin_files)
+        html += F(" checked");
+    html += F(">\n<label for=\"retry_thin_files\">Retry quarantined thin files on next upload</label>\n</div>\n"
+              "<div class=\"hint\" id=\"thinDisabledHint\" style=\"display:none;color:#f0a\">"
+              "Threshold is disabled (0) \u2014 retry-thin has no effect.</div>\n"
+              "<script>(function(){var t=document.getElementById('min_sweeps_threshold');"
+              "var r=document.getElementById('retry_thin_files');"
+              "var h=document.getElementById('thinDisabledHint');"
+              "function upd(){var d=parseInt(t.value||'0',10)===0;r.disabled=d;h.style.display=d?'block':'none';}"
+              "t.addEventListener('input',upd);upd();})();</script>\n"
+              "<script>(function(){function bind(btnId){var b=document.getElementById(btnId);if(!b)return;"
+              "var f=document.getElementById(b.getAttribute('data-field'));"
+              "var c=document.getElementById(b.getAttribute('data-clear'));"
+              "var n=document.getElementById(b.getAttribute('data-note'));"
+              "if(!f||!c)return;b.addEventListener('click',function(){c.value='1';f.value='';"
+              "if(n)n.textContent='Will be cleared on save.';});"
+              "f.addEventListener('input',function(){if(f.value.length>0){c.value='0';"
+              "if(n)n.textContent='New value will replace the saved secret.';}});}"
+              "bind('upload_password_clear_button');bind('wigle_api_token_clear_button');})();</script>\n"
+              "<script>(function(){var m=document.getElementById('wigle_upload_enabled');"
+              "var ids=['auto_upload','upload_ssid','upload_password','upload_password_clear_button',"
+              "'wigle_api_name','wigle_api_token','wigle_api_token_clear_button',"
+              "'compress_before_upload','delete_after_upload','min_sweeps_threshold','retry_thin_files'];"
+              "function upd(){var off=!m.checked;ids.forEach(function(id){var e=document.getElementById(id);"
+              "if(e)e.disabled=off;});}m.addEventListener('change',upd);upd();})();</script>\n"
+              "</div>\n\n");
+
     // --- Web Authentication section ---
     html += F("<div class=\"section\">\n<h2>Web Authentication</h2>\n"
               "<label for=\"admin_user\">Username</label>\n"
               "<input type=\"text\" id=\"admin_user\" name=\"admin_user\" value=\"");
-    html += cfg.web.admin_user;
+    html += htmlEscape(cfg.web.admin_user);
     html += F("\">\n"
               "<label for=\"admin_pass\">Password</label>\n"
               "<input type=\"text\" id=\"admin_pass\" name=\"admin_pass\" placeholder=\"(leave blank to keep current)\">\n"

@@ -1,8 +1,8 @@
 #include "GeofenceFilter.h"
 #include "Logger.h"
 
-GeofenceFilter::GeofenceFilter()
-    : accuracyThreshold(DEFAULT_ACCURACY_THRESHOLD)
+GeofenceFilter::GeofenceFilter(bool superDebug)
+    : accuracyThreshold(DEFAULT_ACCURACY_THRESHOLD), superDebug(superDebug)
 {
 }
 
@@ -13,11 +13,20 @@ void GeofenceFilter::configure(const FilterConfig &filter, float threshold)
     geofenceBoxes = filter.geofence_boxes;
     accuracyThreshold = threshold;
 
-    logger.debugPrintln(String("[GeofenceFilter] Configured: ") +
+    if (superDebug)
+    {
+    logger.debugPrintln(String("[PrivacyFilter] Configured: ") +
                         String(excludedSSIDs.size()) + " excluded SSIDs, " +
                         String(excludedBSSIDs.size()) + " excluded BSSIDs, " +
                         String(geofenceBoxes.size()) + " geofence boxes, " +
                         "accuracy threshold=" + String(accuracyThreshold) + "m");
+    } else 
+    {
+        logger.debugPrintln(String("[PrivacyFilter] Configured: ") +
+                            String(excludedSSIDs.size()) + " excluded SSIDs, " +
+                            String(excludedBSSIDs.size()) + " excluded BSSIDs, " +
+                            String(geofenceBoxes.size()) + " geofence boxes");
+    }
 }
 
 bool GeofenceFilter::isSSIDExcluded(const String &ssid)

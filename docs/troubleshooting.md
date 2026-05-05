@@ -13,6 +13,7 @@ Quick fixes for common problems. If you're stuck, connect via USB and open a ser
 | GPS never gets a fix | Check wiring (TX/RX pins match config), move outdoors with clear sky |
 | No networks found | Normal if area is sparse — the ESP32-S3 only scans 2.4 GHz, not 5 GHz |
 | WiGLE rejects upload | Don't edit the CSV in Excel — it corrupts the encoding |
+| Auto-upload skips at boot | Check that upload is enabled and SSID/API fields are configured |
 
 ---
 
@@ -32,7 +33,7 @@ Quick fixes for common problems. If you're stuck, connect via USB and open a ser
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| "Searching..." forever | GPS not connected or wrong pins | Verify wiring matches config (default: TX=2, RX=1). |
+| "Searching..." forever | GPS not connected or wrong pins | Verify wiring matches config. Defaults are TX=2/RX=1 for Cardputer v1.1 and TX=13/RX=15 for Cardputer ADV. |
 | Satellite count stays 0 | Antenna blocked or indoors | Go outside with a clear sky view. Cold start takes 1–5 minutes. |
 | Satellites found but no 3D fix | Fewer than 4 satellites tracked | Move to a more open area. Urban canyons slow acquisition. |
 | Position jumps around | Poor satellite geometry (high HDOP) | The accuracy guard prevents logging bad fixes. Wait it out. |
@@ -78,7 +79,26 @@ Quick fixes for common problems. If you're stuck, connect via USB and open a ser
 | File counter keeps going up | New file each boot | Expected — each session gets its own `wardriving_NNN.csv` |
 | "SD write failed" in debug log | SD card full or failing | Check available space. Try a new card. |
 | Debug log missing | Debug logging disabled | Enable `debug.enabled` in config |
+| `/wardriver/logs/stats.csv` missing | Debug logging or system stats are disabled, or no stats event has been written yet | Enable both `debug.enabled` and `debug.system_stats_enabled`, then reboot, shut down, trigger manual upload, or wait for `system_stats_interval_s`. |
+| `stats.csv` only has a few rows | The interval is high, or the device only recorded lifecycle events | Lower `system_stats_interval_s` for short diagnostic sessions. The default interval is 300 seconds. |
 | WiGLE rejects upload | Header or encoding corrupted | Don't edit the CSV in Excel. Upload the raw file as-is. |
+
+---
+
+## WiGLE Auto-Upload
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Upload screen never appears | `wigle_upload_enabled` or `auto_upload` is false, required fields are blank, or there are no non-empty CSV files | Enable both **WiGLE upload** and **Auto-upload at boot** in the web portal and confirm `upload_ssid`, `wigle_api_name`, and `wigle_api_token` are set |
+| Skips after looking for home network | Configured SSID was not visible during the 3-second boot scan | Move closer to the AP or check the SSID spelling and 2.4 GHz availability |
+| Could not connect to SSID | Wrong password, weak signal, or AP not accepting the ESP32 connection | Re-enter the password and verify the network supports 2.4 GHz clients |
+| Auth failed | WiGLE API name/token rejected | Copy the API credentials again from your WiGLE account settings |
+| Uploaded files reappear as 0-byte CSVs | A highest-index placeholder preserves filename numbering | Expected. Auto-upload ignores placeholders, and older zero-byte placeholders are cleaned automatically |
+| `.csv.gz` is not much smaller than the CSV | Firmware uses a low-memory gzip stream suitable for upload | Expected for this build; WiGLE should still accept the file |
+| Files end up in `/wardriver/uploaded/thin/` | CSV had fewer distinct sweeps than `min_sweeps_threshold` | Expected. Lower the threshold or set it to `0` to disable. Enable `retry_thin_files` to re-evaluate them |
+| Manual upload (`U`) hint missing on shutdown screen | Upload not configured, no pending CSV files, or low-battery shutdown | Configure SSID/password and WiGLE API credentials. Verify `/wardriver/` contains non-empty `wardriving_*.csv` files. The hint is intentionally hidden during low-battery shutdowns |
+| Manual upload returns to shutdown screen instead of rebooting | Intentional — manual upload from the shutdown screen returns to the locked screen so you can power off cleanly | Press `G0` to reboot, or `B` to blank the screen |
+| Manual upload keeps searching for home network | Wrong SSID or network not available | Double-check the SSID — it's case-sensitive. Ensure the AP is on 2.4 GHz and within range. Press `ESC` to cancel |
 
 ---
 

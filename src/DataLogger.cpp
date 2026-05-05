@@ -1,4 +1,5 @@
 #include "DataLogger.h"
+#include "CsvFileMaintenance.h"
 #include "WiFiScanner.h"
 #include "Logger.h"
 #include <SD.h>
@@ -33,6 +34,8 @@ bool DataLogger::begin(fs::FS &fs)
             return false;
         }
     }
+
+    CsvFileMaintenance::cleanupStaleZeroBytePlaceholders(fs);
 
     // Find next available file index
     int idx = findNextFileIndex();
@@ -217,16 +220,34 @@ int DataLogger::findNextFileIndex()
     while ((entry = dir.openNextFile()))
     {
         String name = entry.name();
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0 && slash + 1 < (int)name.length())
+        {
+            name = name.substring(slash + 1);
+        }
         // Look for files matching wardriving_NNN.csv pattern
         if (name.startsWith(CSV_PREFIX) && name.endsWith(".csv"))
         {
             // Extract the number portion
             String numStr = name.substring(strlen(CSV_PREFIX));
             numStr = numStr.substring(0, numStr.length() - 4); // remove .csv
-            int idx = numStr.toInt();
-            if (idx > maxIdx)
+            bool validIndex = numStr.length() > 0;
+            for (size_t index = 0; index < numStr.length(); ++index)
             {
-                maxIdx = idx;
+                char digit = numStr.charAt(index);
+                if (digit < '0' || digit > '9')
+                {
+                    validIndex = false;
+                    break;
+                }
+            }
+            if (validIndex)
+            {
+                int idx = numStr.toInt();
+                if (idx > maxIdx)
+                {
+                    maxIdx = idx;
+                }
             }
         }
         entry.close();

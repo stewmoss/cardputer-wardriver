@@ -71,7 +71,10 @@ void WiFiScanner::applyCountryCode(const String &cc)
 
 void WiFiScanner::begin(const String &countryCode, int txPower)
 {
-    logger.debugPrintln("[WiFiScanner] Begin");
+    if (superDebug)
+    {
+        logger.debugPrintln("[WiFiScanner] Begin");
+    }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 
@@ -123,11 +126,20 @@ void WiFiScanner::configure(const String &mode, int activeDwellMs, int passiveDw
     superDebug = superDebugEnabled;
     setMacRandomizeConfig(randomizeMACInterval, randomizeMACSpoofOUI);
 
-    char buf[160];
-    snprintf(buf, sizeof(buf),
-             "[WiFiScanner] Configure: Mode: %s | passive=%d | all_channel=%d | active_dwell=%dms | passive_dwell=%dms | mac_randomize_interval=%d | mac_spoof_oui=%d",
-             mode.c_str(), passiveMode, allChannelMode, activeDwellTimeMs, passiveDwellTimeMs, macRandomizeInterval, macSpoofOUI);
-    logger.debugPrintln(buf);
+    if (superDebug)
+    {
+        char buf[160];
+        snprintf(buf, sizeof(buf),
+                 "[WiFiScanner] Configure: Mode: %s | passive=%d | all_channel=%d | active_dwell=%dms | passive_dwell=%dms | mac_randomize_interval=%d | mac_spoof_oui=%d",
+                 mode.c_str(), passiveMode, allChannelMode, activeDwellTimeMs, passiveDwellTimeMs, macRandomizeInterval, macSpoofOUI);
+        logger.debugPrintln(buf);
+    }
+    else
+    {
+        logger.debugPrintln(String("[WiFiScanner] Configure: Mode: ") + mode +
+                            " passive=" + String(passiveMode) +
+                            " all_channel=" + String(allChannelMode));
+    }
 }
 
 void WiFiScanner::randomizeMAC()
@@ -260,8 +272,10 @@ bool WiFiScanner::stopScanning()
                      (int)stopErr, (unsigned long)(millis() - t0), finalArduinoState);
             logger.debugPrintln(buf);
         }
-
-        logger.debugPrintln("[WiFiScanner] Scanning stopped");
+        if (superDebug)
+        {
+            logger.debugPrintln("[WiFiScanner] Scanning stopped");
+        }
 
         return true;
     }

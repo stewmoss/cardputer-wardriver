@@ -17,6 +17,7 @@ Everything you need to know about using the wardriver day-to-day — what's on s
 | **X** | Stop/start scanning (low-power toggle) |
 | **P** | Pause/resume CSV logging |
 | **SPACE** | Toggle dashboard sub-mode (where applicable) |
+| **U** | Trigger manual WiGLE upload (shutdown screen only, when upload is configured and pending files exist) |
 | **G0 button** | Boot: force Config Mode · Running: drop FLAG marker · Shutdown/Config: reboot |
 
 > **Tip:** Press **H** at any time to see this list on-screen. All other keys are blocked while the help overlay is showing.
@@ -29,11 +30,14 @@ Everything you need to know about using the wardriver day-to-day — what's on s
 |------|-------------|----------|
 | 1 | Splash screen (project name + firmware version) | ~1 s |
 | 2 | SD card mounts, config loads | ~1 s |
-| 3 | Satellite search begins | Until GPS locks |
-| 4 | System clock syncs from GPS | Automatic |
-| 5 | Active scanning — logging to CSV | Continuous |
+| 3 | Optional WiGLE auto-upload check | Skipped unless configured |
+| 4 | Satellite search begins | Until GPS locks |
+| 5 | System clock syncs from GPS | Automatic |
+| 6 | Active scanning, logging to CSV | Continuous |
 
 If no config file is found at step 2, the device jumps straight into [Config Mode](web-interface.md).
+
+When auto-upload is enabled, the device looks for the configured home SSID before GPS and WiFi scanning start. G0 cancels before or during upload; a completion screen offers **ENTER** to continue and **R** to retry failed files once.
 
 ---
 
@@ -240,11 +244,40 @@ The original hardware MAC is automatically restored on reboot.
 - Every detected network is logged every scan cycle
 - The open CSV file is flushed periodically during operation and again on stop, pause, and shutdown
 
+### System Stats CSV
+
+When debug logging and system stats are enabled, the firmware appends structured diagnostic telemetry to `/wardriver/logs/stats.csv`. This file is not a WiGLE upload file; it is intended for performance, stability, and hardware troubleshooting.
+
+Rows are written at startup (`init`), at the configured interval during normal operation (`run`), before a shutdown-screen manual upload (`pre_upload`), and during shutdown (`exit`). Each row includes timestamp/epoch when available, uptime, heap and PSRAM usage, scan and station counters, battery percentage and millivolts, charging state, internal temperature, CPU frequency, RTOS task data, and maximum loop time since the previous stats row.
+
 ### Uploading to WiGLE
+
+If auto-upload is configured, pending CSV files are uploaded automatically on boot when the configured home WiFi SSID is visible. Uploaded artifacts are moved to `/wardriver/uploaded/` by default; with gzip enabled this is the `.csv.gz` file sent to WiGLE, and with gzip disabled this is the original `.csv`. Set `delete_after_upload` to `true` to remove them instead.
+
+### Manual Upload from the Shutdown Screen
+
+You can trigger a WiGLE upload on demand from the **shutdown screen** (after pressing `Q` for safe shutdown), without rebooting back into a scan session.
+
+1. While running, press `Q` to safely shut down. The device flushes the data logger, disconnects WiFi, unmounts the SD card, and shows the locked shutdown screen.
+2. If upload is configured and pending files exist, the footer shows `U=Upload  G0=Reboot  B=Off`. Press `U`.
+3. The device re-mounts the SD card and re-enables WiFi STA, then runs the upload phases (sweep pre-scan → upload) and shows a completion summary.
+4. Press any keyboard key on the completion or error screen to return to the locked shutdown screen. The `U` hint is removed — only one upload per shutdown is allowed.
+5. Press `ESC` at any phase before completion to cancel; the device returns to the locked shutdown screen.
+6. Press `G0` to reboot, or `B` to blank the screen.
+
+The `U` hint is hidden when upload is not configured, no files are pending, or the shutdown was triggered by low battery.
+
+### Minimum Sweeps Quarantine
+
+CSV files with fewer distinct sweeps than `min_sweeps_threshold` are not uploaded — they are pre-scanned during the upload phase and moved to `/wardriver/uploaded/thin/` instead. The completion summary shows a **Skipped** count for files quarantined this way. Set `retry_thin_files` to `true` to re-evaluate previously quarantined files on the next upload run.
+
+### Manual SD Upload
 
 1. Press `Q` for safe shutdown (or power off)
 2. Remove the SD card and plug it into your computer
-3. Go to `/wardriver/` and upload any `wardriving_*.csv` to [wigle.net/uploads](https://wigle.net/uploads)
+3. Go to `/wardriver/` and upload any non-empty `wardriving_*.csv` to [wigle.net/uploads](https://wigle.net/uploads)
+
+For diagnostics, copy `/wardriver/logs/stats.csv` from the SD card separately. Do not upload `stats.csv` to WiGLE.
 
 > **Warning:** Don't open CSV files in Excel before uploading — it can alter the encoding and cause WiGLE to reject the file.
 
@@ -278,6 +311,7 @@ Press **Q** for a safe shutdown. The device:
 The summary includes total logged rows, unique APs, session duration, number of scan cycles, peak APs per sweep, and average scan time.
 
 From the shutdown screen:
+- Press **U** to upload pending CSV files when the footer offers `U=Upload`
 - Press **G0** to reboot
 - Press **B** to turn off the display (for faster charging)
 
@@ -286,10 +320,10 @@ From the shutdown screen:
 ## Typical Session
 
 1. Insert SD card, power on
-2. First boot? Set up via the web portal. Otherwise, it goes straight to satellite search.
+2. First boot? Set up via the web portal. Later boots run the optional WiGLE auto-upload check first when it is configured, then continue to satellite search.
 3. Wait for GPS lock (yellow LED → green)
 4. Walk or drive — logging is automatic
 5. Press `ENTER` to check different dashboards, `H` for help
 6. Use `P` to pause through areas you want to skip
 7. Use `X` to take a break without powering off
-8. Press `Q` when done — remove SD card and upload to WiGLE
+8. Press `Q` when done. Use `U` from the shutdown screen if on-device upload is available, or remove the SD card and upload manually.

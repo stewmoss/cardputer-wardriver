@@ -48,7 +48,14 @@ Connect your GPS module to the Cardputer via the Grove port or direct wiring:
 | VCC | 3.3V or 5V | — |
 | GND | GND | — |
 
-> **Tip:** The TX/RX pins are configurable — if your GPS uses different pins, you can change them later in the web portal or config file. The default Cardputer-side pins are TX=`2` and RX=`1`.
+Default Cardputer-side GPS pins depend on the active hardware profile:
+
+| Hardware profile | Cardputer TX pin | Cardputer RX pin |
+|------------------|------------------|------------------|
+| Cardputer (v1.1) | GPIO 2 | GPIO 1 |
+| Cardputer ADV | GPIO 13 | GPIO 15 |
+
+> **Tip:** The TX/RX pins are configurable. If your GPS uses different pins, change them later in the web portal or config file. The Device model selector can also reseed the GPS pins to the selected hardware profile defaults.
 
 ---
 
@@ -63,24 +70,11 @@ That's it. The firmware creates its `/wardriver/` directory automatically on fir
 
 ---
 
-## 5. Build and Flash
+## 5. Installation & Flashing
 
-### VS Code (recommended)
+If you already use [M5Launcher](https://bmorcelli.github.io/Launcher/) to manage your Cardputer, you can install it with OTA
 
-1. Open the project folder in VS Code
-2. Click the **checkmark** icon in the bottom toolbar to build
-3. Connect the Cardputer via USB-C
-4. Click the **arrow** icon to upload
-
-### Command Line
-
-```bash
-pio run                # Build only
-pio run -t upload      # Build and flash
-pio device monitor     # Serial monitor at 115200 baud
-```
-
-After a successful build, the firmware binary is also saved to `output/wardriver-<version>.bin`.
+Or you can burn it directly from the [m5burner tool](https://docs.m5stack.com/en/uiflow/m5burner/intro), just search for 'Wardriver' on the 'cardputer' device category and click on burn.
 
 ---
 
@@ -93,6 +87,8 @@ After a successful build, the firmware binary is also saved to `output/wardriver
    - **SSID:** `M5-Wardriver`
    - **IP:** `192.168.4.1`
 
+On later boots with a valid config, the firmware skips Config Mode. If WiGLE upload and boot-time auto-upload are enabled, it runs the upload check before GPS acquisition; otherwise it starts satellite search immediately.
+
 ---
 
 ## 7. Configure via the Web Portal
@@ -102,7 +98,7 @@ After a successful build, the firmware binary is also saved to `output/wardriver
 3. Log in with the default credentials: **admin** / **password**
 4. Fill in your settings:
    - **Hardware Model** — leave `Auto-detect` unless you need to force `Cardputer (v1.1)` or `Cardputer ADV`
-   - **GPS TX/RX pins** — match your wiring (default: TX=2, RX=1)
+   - **GPS TX/RX pins** — match your wiring (v1.1 default: TX=2, RX=1; ADV default: TX=13, RX=15)
    - **GMT Offset** — your timezone offset from UTC (e.g., `10` for AEST, `-5` for EST)
    - **Scan mode** — choose between active/passive and hop/all-channel
    - **Accuracy threshold** — how tight the GPS fix must be before logging starts
@@ -138,24 +134,34 @@ After rebooting with a valid config:
 | `P` | Pause/resume CSV logging (scanning continues) |
 | `X` | Stop/start scanning entirely (low power mode) |
 | `Q` | Safe shutdown — flush logs, unmount SD card |
+| `U` | Trigger manual WiGLE upload from the shutdown screen when upload is configured and files are pending |
 | `G0` button | Drop a FLAG marker at your current GPS position |
 
 See the full [Operation Guide](operation.md) for dashboard details and advanced features.
 
 ---
 
-## 9. Retrieve Your Data
+## 9. Retrieve or Upload Your Data
 
-1. Press `Q` for a safe shutdown
-2. Remove the SD card and insert it into a computer
-3. Navigate to the `/wardriver/` folder
-4. Upload any `wardriving_*.csv` file to [wigle.net/uploads](https://wigle.net/uploads)
+### On-Device WiGLE Upload
+
+1. Enable `wigle_upload_enabled` in the Upload section of the web portal.
+2. Enter your home WiFi SSID, WiFi password, WiGLE API name, and WiGLE API token.
+3. Optional: enable `auto_upload` to upload pending CSV files at boot when the configured SSID is visible.
+4. For a manual upload, press `Q` for safe shutdown. If upload is configured and pending files exist, press `U` on the shutdown screen.
+
+### Manual SD Upload
+
+1. Press `Q` for a safe shutdown.
+2. Remove the SD card and insert it into a computer.
+3. Navigate to the `/wardriver/` folder.
+4. Upload any non-empty `wardriving_*.csv` file to [wigle.net/uploads](https://wigle.net/uploads).
 
 The CSV files are in WiGLE v1.6 format — no conversion needed.
 
 ---
 
-## Serial Debug
+## 9. Serial Debug
 
 If something isn't working, connect via USB and open a serial monitor at **115200 baud** to see real-time status messages:
 
@@ -164,3 +170,26 @@ pio device monitor
 ```
 
 You'll see firmware version, config status, GPS updates, scan results, and any error messages.
+
+---
+
+## 10. Build and Flash
+
+### VS Code (recommended)
+
+1. Open the project folder in VS Code
+2. Click the **checkmark** icon in the bottom toolbar to build
+3. Connect the Cardputer via USB-C
+4. Click the **arrow** icon to upload
+
+### Command Line
+
+```bash
+pio run                # Build only
+pio run -t upload      # Build and flash
+pio device monitor     # Serial monitor at 115200 baud
+```
+
+After a successful build, the firmware binary is also saved to `output/wardriver-<version>.bin`.
+
+---

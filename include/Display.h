@@ -8,6 +8,13 @@
 class Display
 {
 public:
+    enum class ExitMode : uint8_t
+    {
+        RETURN,             // Continue normal flow on exit
+        REBOOT,             // Reboot the device on exit
+        RETURN_TO_SHUTDOWN  // Return to the locked shutdown summary on exit
+    };
+
     Display();
     void begin();
     void showStartup(const char *modelName = nullptr, const char *source = nullptr);
@@ -18,9 +25,28 @@ public:
     DisplayView getCurrentView();
     void clearScreen();
     void showError(const String &msg);
-    void showShutdown(const SessionSummary &summary, bool lowBattery = false);
+    void showShutdownLocked(const SessionSummary &summary,
+                            bool lowBattery,
+                            bool uploadAvailable);
     void showLowBatteryWarning(int pct, int secondsRemaining);
     void setBatteryLevel(int pct);
+
+    // Auto-upload screens
+    void showUploadScanning(const String &ssid);
+    void showUploadCountdown(int pendingFiles, int secondsRemaining);
+    void showUploadLowBattery(int batteryPct, int secondsRemaining);
+    void showUploadProgress(const String &filename,
+                            uint32_t fileIndex,
+                            uint32_t totalFiles,
+                            uint32_t bytesSent,
+                            uint32_t bytesTotal,
+                            uint32_t elapsedSec);
+    void showUploadComplete(const UploadStats &stats,
+                            bool retryAvailable,
+                            ExitMode exitMode = ExitMode::RETURN);
+    void showUploadError(const String &message, ExitMode exitMode = ExitMode::RETURN);
+    void showUploadSweepScanning(const String &filename, uint32_t fileIndex, uint32_t totalFiles);
+    void showUploadCancelled();
 
     // Display blank / unblank
     void toggleBlank(int savedBrightness);
@@ -113,13 +139,32 @@ private:
 
     DashECache _dashECache;
 
+    struct UploadCache
+    {
+        String screen;
+        String line1;
+        String line2;
+        String line3;
+        uint32_t bytesSent;
+        uint32_t bytesTotal;
+        uint32_t fileIndex;
+        uint32_t totalFiles;
+        uint32_t elapsedSec;
+        bool retryAvailable;
+    };
+
+    UploadCache _uploadCache;
+
     void _resetCaches();
     void _drawField(const String &oldVal, const String &newVal,
                     int x, int y, uint16_t fg, uint8_t textSize = 1);
 
     void drawHeader(const String &title);
+    void drawUploadHeader(const String &title, uint16_t color);
     void drawFooter(const String &status);
     String formatUptime(unsigned long ms);
+    String formatDuration(uint32_t seconds);
+    String formatBytes(uint64_t bytes);
     String truncateSSID(const String &ssid, int maxLen);
 };
 

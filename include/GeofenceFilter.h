@@ -7,7 +7,7 @@
 class GeofenceFilter
 {
 public:
-    GeofenceFilter();
+    GeofenceFilter(bool superDebug = false);
     void configure(const FilterConfig &filter, float accuracyThreshold);
 
     bool isSSIDExcluded(const String &ssid);
@@ -21,6 +21,7 @@ private:
     std::vector<String> excludedBSSIDs;
     std::vector<GeofenceBox> geofenceBoxes;
     float accuracyThreshold;
+    bool superDebug;
 };
 
 #endif // GEOFENCE_FILTER_H

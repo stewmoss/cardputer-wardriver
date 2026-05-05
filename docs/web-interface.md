@@ -45,8 +45,8 @@ Changing the hardware model resets the GPS TX/RX fields below to the selected pr
 
 | Field | What to enter | Default |
 |-------|--------------|---------|
-| TX Pin | GPIO pin wired to your GPS module's TX | `2` |
-| RX Pin | GPIO pin wired to your GPS module's RX | `1` |
+| TX Pin | Cardputer/ESP32 TX GPIO wired to your GPS module's RX | `2` |
+| RX Pin | Cardputer/ESP32 RX GPIO wired from your GPS module's TX | `1` |
 | Accuracy Threshold (meters) | How accurate GPS must be before logging starts (lower = stricter) | `500` |
 | GMT Offset (hours) | Your timezone offset from UTC (e.g., `10` for AEST, `-5` for EST) | `0` |
 | GPS Logging Mode | What to do when GPS fix is lost — **Fix Only** (default), **Zero GPS**, or **Last Known** | Fix Only |
@@ -98,8 +98,25 @@ Changing the hardware model resets the GPS TX/RX fields below to the selected pr
 |-------|-------------|
 | Enable Debug Logging | Write detailed logs to the SD card |
 | Enable Super Debug | Extra verbose scan-level logging (requires debug enabled) |
-| Enable System Stats | Periodically log heap/battery stats |
+| Enable System Stats | Periodically append structured telemetry to `/wardriver/logs/stats.csv` (requires debug logging) |
 | View Debug Log | Link to view the log file in your browser (appears when debug is enabled) |
+
+### Upload
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| Enable WiGLE upload (manual + auto) | Master switch for all upload paths, including boot-time auto-upload and shutdown-screen manual upload | Off |
+| Auto-upload WiGLE CSVs at boot | Enables the boot-time upload check | Off |
+| Home WiFi SSID | SSID that must be visible before upload starts | Blank |
+| Home WiFi Password | Password for the home network | Blank |
+| WiGLE API Name | WiGLE API username/name component | Blank |
+| WiGLE API Token | WiGLE API token component | Blank |
+| Gzip before upload | Sends `.csv.gz` files to WiGLE | On |
+| Delete after successful upload | Deletes uploaded artifacts instead of archiving them under `/wardriver/uploaded/` | Off |
+| Minimum sweeps per file | CSV files with fewer distinct GPS-timestamp sweeps are quarantined to `/wardriver/uploaded/thin/` instead of being uploaded. `0` disables the check. | 20 |
+| Retry quarantined files | When enabled, files in `/wardriver/uploaded/thin/` are re-evaluated on the next upload run. Disabled when **Minimum sweeps per file** is `0`. | Off |
+
+The upload check runs before normal scanning, so it does not interrupt an active wardriving session. Manual upload can also be triggered from the **shutdown screen** (after pressing `Q`) by pressing `U`.
 
 ### Web Authentication
 
@@ -128,6 +145,8 @@ When debug logging is enabled, a **View Debug Log** link appears in the Debug se
 
 The log viewer requires the same login credentials as the main portal.
 
+System stats are written to `/wardriver/logs/stats.csv` on the SD card. The `/debuglog` page shows `debug.log`; retrieve `stats.csv` directly from the SD card when you want the structured telemetry CSV.
+
 ---
 
 ## API Endpoints
@@ -138,7 +157,7 @@ For programmatic access, the portal exposes these endpoints (all require authent
 |--------|------|----------------|
 | `GET /` | Main page | HTML configuration form |
 | `POST /save` | Save | Writes config and reboots |
-| `GET /status` | Status | JSON with firmware version, uptime, free heap, SD status |
+| `GET /status` | Status | JSON with firmware version, uptime, free heap, SD status, upload status |
 | `GET /debuglog` | Debug log | Log viewer page |
 | `POST /cleardebuglog` | Clear log | Wipes the debug log file |
 
@@ -149,7 +168,15 @@ For programmatic access, the portal exposes these endpoints (all require authent
     "firmware": "0.0.1",
     "uptime": 1234,
     "free_heap": 245760,
-    "sd_mounted": true
+    "sd_mounted": true,
+    "upload": {
+        "enabled": false,
+        "auto_upload": false,
+        "configured": false,
+        "min_sweeps_threshold": 20,
+        "retry_thin_files": false,
+        "last_upload_iso": null
+    }
 }
 ```
 

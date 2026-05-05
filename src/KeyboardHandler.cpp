@@ -14,11 +14,44 @@ KeyboardHandler::KeyboardHandler()
 {
 }
 
-KeyAction KeyboardHandler::poll(AppState currentState, bool helpVisible, bool displayBlank)
+KeyAction KeyboardHandler::poll(AppState currentState,
+                                bool helpVisible,
+                                bool displayBlank,
+                                DisplayView currentView,
+                                bool shutdownUploadAvailable,
+                                bool uploadActive)
 {
     if (currentState == STATE_LOW_BATTERY_WARNING)
     {
         return KEY_ACTION_NONE;
+    }
+
+    if (currentState == STATE_UPLOAD_RUN || uploadActive)
+    {
+        if (M5Cardputer.BtnA.wasPressed())
+        {
+            return KEY_ACTION_CANCEL_UPLOAD;
+        }
+        if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed())
+        {
+            Keyboard_Class::KeysState keys = M5Cardputer.Keyboard.keysState();
+            // ESC key — Cardputer reports as 0x1B in word vector.
+            for (auto key : keys.word)
+            {
+                if (key == 0x1B)
+                {
+                    return KEY_ACTION_CANCEL_UPLOAD;
+                }
+            }
+        }
+        // Note: when uploadActive is true (shutdown-driven upload), we still
+        // fall through below if no cancel was pressed, so other shutdown
+        // keys (G0 already handled in main) and the upload module's own
+        // any-key path on COMPLETE/ERROR continue to work.
+        if (currentState == STATE_UPLOAD_RUN)
+        {
+            return KEY_ACTION_NONE;
+        }
     }
 
     if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed())
@@ -35,6 +68,10 @@ KeyAction KeyboardHandler::poll(AppState currentState, bool helpVisible, bool di
             if (matchesKey(key, 'b'))
             {
                 return KEY_ACTION_TOGGLE_BLANK;
+            }
+            if (shutdownUploadAvailable && matchesKey(key, 'u'))
+            {
+                return KEY_ACTION_SHUTDOWN_UPLOAD;
             }
         }
         return KEY_ACTION_NONE;
