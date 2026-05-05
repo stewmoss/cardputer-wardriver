@@ -18,6 +18,7 @@
 #define DEBUG_LOG_DIR "/wardriver/logs"
 #define CSV_DIR "/wardriver"
 #define CSV_PREFIX "wardriving_"
+#define CSV_INDEX_NONE -1
 #define AP_SSID "M5-Wardriver"
 
 // ── Hardware Pin Constants (M5 Cardputer) ---------------------------------------------
@@ -104,6 +105,34 @@
     "CurrentLatitude,CurrentLongitude,AltitudeMeters,AccuracyMeters," \
     "RCOIs,MfgrId,Type"
 
+// -- WiGLE Upload Constants ---------------------------------------------
+#define UPLOAD_DIR "/wardriver/uploaded"
+#define UPLOAD_TEMP_DIR "/wardriver/temp"
+#define WIGLE_API_HOST "api.wigle.net"
+#define WIGLE_API_PORT 443
+#define WIGLE_API_UPLOAD_PATH "/api/v2/file/upload"
+
+#define UPLOAD_HOME_SCAN_TIMEOUT_MS 3000UL
+#define UPLOAD_FOUND_COUNTDOWN_MS 10000UL
+#define UPLOAD_LOW_BATT_TIMEOUT_MS 5000UL
+#define UPLOAD_STA_CONNECT_TIMEOUT_MS 30000UL
+#define UPLOAD_HTTP_TIMEOUT_S 30UL
+#define UPLOAD_GZIP_CHUNK_BYTES 4096
+#define MIN_UPLOAD_BATTERY_PCT 15
+
+#define DEFAULT_UPLOAD_WIGLE_ENABLED false
+#define DEFAULT_UPLOAD_AUTO_ENABLED false
+#define DEFAULT_UPLOAD_COMPRESS true
+#define DEFAULT_UPLOAD_DELETE_AFTER false
+#define DEFAULT_UPLOAD_MIN_SWEEPS 20
+#define DEFAULT_UPLOAD_RETRY_THIN false
+
+// Thin-file quarantine
+#define UPLOAD_THIN_DIR "/wardriver/uploaded/thin"
+
+// Line buffer for reading CSV rows during sweep pre-scan
+#define UPLOAD_SWEEP_LINE_BUF_BYTES 512
+
 // ── Display Constants ---------------------------------------------
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 135
@@ -168,6 +197,41 @@ struct SessionSummary
     uint32_t totalSweeps;
 };
 
+struct UploadStats
+{
+    uint16_t totalFiles;
+    uint16_t successCount;
+    uint16_t failCount;
+    uint16_t thinCount;
+    uint64_t bytesOriginal;
+    uint64_t bytesCompressed;
+    uint32_t recordCount;
+    uint32_t startMs;
+    uint32_t endMs;
+};
+
+struct UploadFileResult
+{
+    String filename;
+    bool success;
+    bool skippedThin;
+    int httpCode;
+    String errorMessage;
+    uint32_t bytesOriginal;
+    uint32_t bytesCompressed;
+    uint32_t recordCount;
+};
+
+struct CsvPlaceholderCleanupResult
+{
+    bool success;
+    uint16_t zeroByteSeen;
+    uint16_t zeroByteRemoved;
+    int highestIndex;
+    int retainedIndex;
+    bool retainedPlaceholder;
+};
+
 // ── Configuration Structs ───────────────────────────────────────────────────
 
 struct GPSConfig
@@ -227,6 +291,27 @@ struct WebConfig
     String admin_pass;
 };
 
+struct UploadConfig
+{
+    // Master switch for the whole WiGLE upload subsystem (manual + auto).
+    // When false, no upload pathways are available and the manual U key
+    // shortcut is suppressed.
+    bool wigle_upload_enabled;
+    // When true (and wigle_upload_enabled is true) the device runs the
+    // boot-time auto-upload check. When false but wigle_upload_enabled is
+    // true, boot-time auto-upload is skipped and manual upload is still
+    // available from the shutdown screen.
+    bool auto_upload;
+    String upload_ssid;
+    String upload_password;
+    String wigle_api_name;
+    String wigle_api_token;
+    bool compress_before_upload;
+    bool delete_after_upload;
+    uint16_t min_sweeps_threshold;
+    bool retry_thin_files;
+};
+
 struct DeviceConfig
 {
     // User choice of hardware model: "auto" | "cardputer" | "cardputer_adv"
@@ -249,6 +334,7 @@ struct AppConfig
     HardwareConfig hardware;
     DebugConfig debug;
     WebConfig web;
+    UploadConfig upload;
 };
 
 struct ScanSession
@@ -281,6 +367,7 @@ struct ScanSession
     unsigned long lastBatteryCheck;
     unsigned long lowBatteryWarnStart;
     unsigned long lastGeofenceBeep;
+    unsigned long maxLoopTime;
     int lastBatteryLevel;
 
     AppConfig config;
@@ -329,6 +416,7 @@ struct ScanSession
 enum AppState
 {
     STATE_INIT,
+    STATE_UPLOAD_RUN,
     STATE_CONFIG_MODE,
     STATE_SEARCHING_SATS,
     STATE_ACTIVE_SCAN,
@@ -349,7 +437,9 @@ enum KeyAction
     KEY_ACTION_DISMISS_HELP,
     KEY_ACTION_TOGGLE_SCAN,
     KEY_ACTION_TOGGLE_PAUSE,
-    KEY_ACTION_SUB_VIEW
+    KEY_ACTION_SUB_VIEW,
+    KEY_ACTION_CANCEL_UPLOAD,
+    KEY_ACTION_SHUTDOWN_UPLOAD
 };
 
 enum DisplayView

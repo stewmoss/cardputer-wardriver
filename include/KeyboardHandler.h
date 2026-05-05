@@ -7,7 +7,12 @@ class KeyboardHandler
 {
 public:
     KeyboardHandler();
-    KeyAction poll(AppState currentState, bool helpVisible, bool displayBlank);
+    KeyAction poll(AppState currentState,
+                   bool helpVisible,
+                   bool displayBlank,
+                   DisplayView currentView = VIEW_SEARCHING_SATS,
+                   bool shutdownUploadAvailable = false,
+                   bool uploadActive = false);
 };
 
 #endif // KEYBOARD_HANDLER_H

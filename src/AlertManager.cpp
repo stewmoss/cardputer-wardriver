@@ -11,9 +11,10 @@ AlertManager::AlertManager()
 {
 }
 
-void AlertManager::begin(HardwareConfig &config)
+void AlertManager::begin(HardwareConfig &config, bool superDebug)
 {
     hwConfig = &config;
+    this->superDebug = superDebug;
 
     // Initialize FastLED for SK6812 on LED_PIN
     FastLED.addLeds<SK6812, LED_PIN, GRB>(leds, NUM_LEDS);
@@ -25,7 +26,9 @@ void AlertManager::begin(HardwareConfig &config)
     M5Cardputer.Display.setBrightness(hwConfig->screen_brightness);
 
     initialized = true;
-    logger.debugPrintln("[AlertManager] Initialized");
+    if(superDebug){
+      logger.debugPrintln("[AlertManager] Initialized");
+    }
 }
 
 void AlertManager::triggerAlert()
@@ -128,7 +131,7 @@ void AlertManager::setBuzzer(int freq, int duration_ms)
 void AlertManager::toggleMute()
 {
     soundMuted = !soundMuted;
-    logger.debugPrintln(soundMuted ? "[AlertManager] Sound muted" : "[AlertManager] Sound unmuted");
+    logger.debugPrintln(soundMuted ? "[AlertManager] Muted" : "[AlertManager] Unmuted");
 }
 
 // ── Tone Sequence Player ────────────────────────────────────────────────────

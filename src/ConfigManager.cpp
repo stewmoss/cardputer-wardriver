@@ -28,6 +28,21 @@ bool isValidWifiTxPower(int txPower)
         return false;
     }
 }
+
+String boundedString(const char *value, size_t maxLen)
+{
+    if (value == nullptr)
+    {
+        return String("");
+    }
+
+    String result(value);
+    if (result.length() > maxLen)
+    {
+        result = result.substring(0, maxLen);
+    }
+    return result;
+}
 }
 
 ConfigManager::ConfigManager()
@@ -79,6 +94,17 @@ void ConfigManager::setDefaults()
 
     config.web.admin_user = DEFAULT_ADMIN_USER;
     config.web.admin_pass = DEFAULT_ADMIN_PASS;
+
+    config.upload.wigle_upload_enabled = DEFAULT_UPLOAD_WIGLE_ENABLED;
+    config.upload.auto_upload = DEFAULT_UPLOAD_AUTO_ENABLED;
+    config.upload.upload_ssid = "";
+    config.upload.upload_password = "";
+    config.upload.wigle_api_name = "";
+    config.upload.wigle_api_token = "";
+    config.upload.compress_before_upload = DEFAULT_UPLOAD_COMPRESS;
+    config.upload.delete_after_upload = DEFAULT_UPLOAD_DELETE_AFTER;
+    config.upload.min_sweeps_threshold = DEFAULT_UPLOAD_MIN_SWEEPS;
+    config.upload.retry_thin_files = DEFAULT_UPLOAD_RETRY_THIN;
 }
 
 bool ConfigManager::loadConfig(const char *filename)
@@ -100,7 +126,7 @@ bool ConfigManager::loadConfig(const char *filename)
         return false;
     }
 
-    DynamicJsonDocument doc(3072);
+    DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, file);
     file.close();
 
@@ -271,6 +297,47 @@ bool ConfigManager::loadConfig(const char *filename)
         config.web.admin_pass = web["admin_pass"] | DEFAULT_ADMIN_PASS;
     }
 
+    // Upload config
+    JsonObject upload = doc["upload"];
+    if (upload)
+    {
+        // Backward compatibility: legacy `auto_upload_enabled` key (pre-rename)
+        // acted as the master switch for the entire upload feature. If it is
+        // present in the JSON, treat it as enabling both the master switch
+        // and the boot-time auto-upload behaviour.
+        bool legacyAutoUpload = upload["auto_upload_enabled"] | false;
+        bool hasLegacyKey = upload["auto_upload_enabled"].is<bool>();
+        config.upload.wigle_upload_enabled = upload["wigle_upload_enabled"] |
+            (hasLegacyKey ? legacyAutoUpload : DEFAULT_UPLOAD_WIGLE_ENABLED);
+        config.upload.auto_upload = upload["auto_upload"] |
+            (hasLegacyKey ? legacyAutoUpload : DEFAULT_UPLOAD_AUTO_ENABLED);
+        if (upload["upload_ssid"].is<const char *>())
+        {
+            config.upload.upload_ssid = boundedString(upload["upload_ssid"], 32);
+        }
+        if (upload["upload_password"].is<const char *>())
+        {
+            config.upload.upload_password = boundedString(upload["upload_password"], 63);
+        }
+        if (upload["wigle_api_name"].is<const char *>())
+        {
+            config.upload.wigle_api_name = boundedString(upload["wigle_api_name"], 64);
+        }
+        if (upload["wigle_api_token"].is<const char *>())
+        {
+            config.upload.wigle_api_token = boundedString(upload["wigle_api_token"], 128);
+        }
+        config.upload.compress_before_upload = upload["compress_before_upload"] | DEFAULT_UPLOAD_COMPRESS;
+        config.upload.delete_after_upload = upload["delete_after_upload"] | DEFAULT_UPLOAD_DELETE_AFTER;
+        {
+            long v = upload["min_sweeps_threshold"] | (long)DEFAULT_UPLOAD_MIN_SWEEPS;
+            if (v < 0) v = 0;
+            if (v > 65535) v = 65535;
+            config.upload.min_sweeps_threshold = (uint16_t)v;
+        }
+        config.upload.retry_thin_files = upload["retry_thin_files"] | DEFAULT_UPLOAD_RETRY_THIN;
+    }
+
     configValid = true;
     logger.debugPrintln("[Config] Config loaded successfully");
     return true;
@@ -278,7 +345,7 @@ bool ConfigManager::loadConfig(const char *filename)
 
 bool ConfigManager::saveConfig(const char *filename)
 {
-    DynamicJsonDocument doc(3072);
+    DynamicJsonDocument doc(4096);
 
     // Device
     JsonObject device = doc.createNestedObject("device");
@@ -351,6 +418,19 @@ bool ConfigManager::saveConfig(const char *filename)
     JsonObject web = doc.createNestedObject("web");
     web["admin_user"] = config.web.admin_user;
     web["admin_pass"] = config.web.admin_pass;
+
+    // Upload
+    JsonObject upload = doc.createNestedObject("upload");
+    upload["wigle_upload_enabled"] = config.upload.wigle_upload_enabled;
+    upload["auto_upload"] = config.upload.auto_upload;
+    upload["upload_ssid"] = config.upload.upload_ssid;
+    upload["upload_password"] = config.upload.upload_password;
+    upload["wigle_api_name"] = config.upload.wigle_api_name;
+    upload["wigle_api_token"] = config.upload.wigle_api_token;
+    upload["compress_before_upload"] = config.upload.compress_before_upload;
+    upload["delete_after_upload"] = config.upload.delete_after_upload;
+    upload["min_sweeps_threshold"] = config.upload.min_sweeps_threshold;
+    upload["retry_thin_files"] = config.upload.retry_thin_files;
 
     File file = SD.open(filename, FILE_WRITE);
     if (!file)

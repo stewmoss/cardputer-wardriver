@@ -49,6 +49,33 @@ void Logger::debugPrintln()
     writeToFile("", true);
 }
 
+bool Logger::logStatsCSV(const String& csvRow)
+{
+    if (!sdReady || !config || !config->debug.system_stats_enabled)
+        return false;
+    
+    if (!ensureLogDirectory())
+        return false;
+
+    String statsFile = String(DEBUG_LOG_DIR) + "/stats.csv";
+    bool writeHeader = !SD.exists(statsFile);
+
+    File f = SD.open(statsFile, FILE_APPEND);
+    if (!f)
+        return false;
+
+    if (writeHeader)
+    {
+        f.print("timestamp,epoch_s,type,uptime_s,mem_used,mem_free,heap_size,heap_used,heap_free,min_heap_free,max_alloc_heap,psram_size,psram_free,total_sweeps,max_stations_per_sweep,total_stations_seen,unique_stations,last_scan_count,bssid_set_count,bssid_set_est_bytes,batt_pct,batt_mv,is_charging,temp_c,cpu_mhz,task_hwm,tot_tasks,max_loop_ms\n");
+    }
+
+    f.print(csvRow);
+    f.print("\n");
+    f.close();
+    
+    return true;
+}
+
 String Logger::getDebugLogFile()
 {
     return debugFile;

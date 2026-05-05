@@ -17,6 +17,9 @@
 #include "KeyboardHandler.h"
 #include "WebPortal.h"
 #include "HardwareProfile.h"
+#include "WiFiManager.h"
+#include "UploadManager.h"
+#include "CsvFileMaintenance.h"
 
 // ── Global Instances ────────────────────────────────────────────────────────
 ConfigManager configManager;
@@ -24,6 +27,8 @@ Display display;
 AlertManager alertManager;
 GPSManager gpsManager;
 WiFiScanner wifiScanner;
+WiFiManager wifiManager;
+UploadManager uploadManager;
 GeofenceFilter geofenceFilter;
 DataLogger dataLogger;
 WebPortal *webPortal = nullptr;
@@ -33,6 +38,7 @@ KeyboardHandler keyboardHandler;
 AppState currentState = STATE_INIT;
 ScanSession session;
 bool superDebug = false;
+bool runtimeModulesInitialized = false;
 CardputerModel detectedModel = MODEL_UNKNOWN;
 CardputerModel activeModel = MODEL_CARDPUTER;
 
@@ -45,18 +51,39 @@ void executeKeyAction(KeyAction action);
 void handleToggleScanAction();
 void handleTogglePauseAction();
 void handleSearchingSatellites();
+void handleUploadRun();
 void handleActiveScan();
 void handleConfigMode();
 void handleLowBatteryWarning();
+void enterUploadRunState();
 void enterConfigModeState();
 void enterSearchingSatellitesState();
 void enterActiveScanState();
 void enterShutdownState(bool lowBattery = false);
 void enterLowBatteryWarningState(int pct);
+void initializeRuntimeModulesAndEnterSearching();
 void checkBattery();
-void logSystemStatsIfDue(unsigned long now);
+void logSystemStats(unsigned long now, const char *statsType = "run");
 void processCompletedScan();
+int countPendingFilesForManual();
+bool uploadIsConfigured();
+void handleShutdown();
+void handleShutdownUploadAction();
 std::vector<WiFiNetwork> getTopNetworks(const std::vector<WiFiNetwork> &nets, int count);
+
+// ── Shutdown sub-phase tracking ─────────────────────────────────────────────
+enum class ShutdownPhase : uint8_t
+{
+    LOCKED,
+    UPLOAD_PREP,
+    UPLOADING,
+    RELOCKING
+};
+static ShutdownPhase shutdownPhase = ShutdownPhase::LOCKED;
+static bool shutdownUploadAvailable = false;
+static SessionSummary shutdownSummary{};
+static bool shutdownLowBattery = false;
+static int cachedPendingFileCount = 0;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SETUP
@@ -80,12 +107,12 @@ void setup()
     // Splash shows the detected model; active model may differ if the
     // saved config has a manual override (decided after SD/config load).
     display.showStartup(getProfile(detectedModel != MODEL_UNKNOWN ? detectedModel : MODEL_CARDPUTER).model_name,
-                       "auto");
+                        "auto");
 
     Serial.begin(115200);
     delay(1000); // Wait for USB CDC re-enumeration after reset
-    Serial.println("\n\n=== M5 Cardputer Wardriver ===");
-    Serial.println("Firmware v" FIRMWARE_VERSION);
+    Serial.println("\n\n=== Wardriver // stewmoss ===");
+    Serial.println("v" FIRMWARE_VERSION);
 
     // 3. Initialize SD card
     SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_SPI_CS_PIN);
@@ -160,9 +187,13 @@ void setup()
 
     // 7. Configure logger with loaded config
     logger.setConfig(&appConfig);
+    superDebug = appConfig.debug.enabled && appConfig.debug.super_debug_enabled;
+
+    logger.debugPrintln("=== Wardriver // stewmoss ===");
+    logger.debugPrintln("Firmware v" FIRMWARE_VERSION);
 
     // 8. Initialize alert manager (LED + buzzer + brightness)
-    alertManager.begin(appConfig.hardware);
+    alertManager.begin(appConfig.hardware, superDebug);
 
     // 9. Check G0 button — if held, enter Config Mode
     M5Cardputer.update();
@@ -181,38 +212,33 @@ void setup()
         return;
     }
 
-    // 12. Initialize GPS
-    superDebug = appConfig.debug.enabled && appConfig.debug.super_debug_enabled;
-    gpsManager.begin(appConfig.gps.tx_pin, appConfig.gps.rx_pin, appConfig.gps.baud, superDebug);
-    dataLogger.setGPSManager(&gpsManager);
+    // 12. Boot-time upload gate. GPS/scanner initialization happens after this
+    // state exits so upload STA mode cannot conflict with scanner WiFi mode.
 
-    // 13. Initialize WiFi scanner
-    wifiScanner.begin(appConfig.scan.wifi_country_code, appConfig.scan.wifi_tx_power);
-    wifiScanner.configure(appConfig.scan.scan_mode,
-                          appConfig.scan.active_dwell_ms,
-                          appConfig.scan.passive_dwell_ms,
-                          appConfig.scan.mac_randomize_interval,
-                          appConfig.scan.mac_spoof_oui,
-                          superDebug);
+    CsvFileMaintenance::setSuperDebug(superDebug);
+    CsvFileMaintenance::cleanupStaleZeroBytePlaceholders(SD);
 
-    // 14. Configure geofence filter
-    geofenceFilter.configure(appConfig.filter, appConfig.gps.accuracy_threshold_meters);
+    uploadManager.begin(&display, &alertManager, &wifiManager, &appConfig.upload, &appConfig.scan, superDebug);
 
-    // 15. Record boot time; do initial battery read, then enter searching state
-    session.bootTime = millis();
-    checkBattery();
-    session.lastBatteryCheck = millis();
-    if (currentState != STATE_LOW_BATTERY_WARNING)
+    // Log init after main modules started
+    logSystemStats(millis(), "init");
+
+    if (uploadManager.shouldRun())
     {
-        enterSearchingSatellitesState();
+        enterUploadRunState();
     }
+    else
+    {
+        initializeRuntimeModulesAndEnterSearching();
+    }
+    logger.debugPrintln("Setup complete");
 
     // Delay for 2000
     uint32_t elapsed = millis() - splashStart;
     if (elapsed < 2000)
     {
         delay(2000 - elapsed);
-    } 
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -220,24 +246,35 @@ void setup()
 // ═══════════════════════════════════════════════════════════════════════════
 void loop()
 {
+    unsigned long loopStartMs = millis();
+
     M5Cardputer.update();
     alertManager.update();
 
-    executeKeyAction(keyboardHandler.poll(currentState, display.isHelpVisible(), display.isBlank()));
+    bool uploadActive = (currentState == STATE_SHUTDOWN &&
+                         shutdownPhase == ShutdownPhase::UPLOADING);
+    executeKeyAction(keyboardHandler.poll(currentState, display.isHelpVisible(), display.isBlank(),
+                                          display.getCurrentView(),
+                                          shutdownUploadAvailable && shutdownPhase == ShutdownPhase::LOCKED,
+                                          uploadActive));
 
     // Periodic battery check (skip during config mode and shutdown)
     if (currentState == STATE_SEARCHING_SATS || currentState == STATE_ACTIVE_SCAN)
     {
-        if (millis() - session.lastBatteryCheck >= BATTERY_CHECK_INTERVAL_MS)
+        if (loopStartMs - session.lastBatteryCheck >= BATTERY_CHECK_INTERVAL_MS)
         {
             checkBattery();
-            session.lastBatteryCheck = millis();
+            session.lastBatteryCheck = loopStartMs;
         }
-        logSystemStatsIfDue(millis());
+        logSystemStats(loopStartMs, "run");
     }
 
     switch (currentState)
     {
+    case STATE_UPLOAD_RUN:
+        handleUploadRun();
+        break;
+
     case STATE_SEARCHING_SATS:
         handleSearchingSatellites();
         break;
@@ -255,13 +292,7 @@ void loop()
         break;
 
     case STATE_SHUTDOWN:
-        // Screen locked — only G0 button reboots
-        if (M5Cardputer.BtnA.wasPressed())
-        {
-            logger.debugPrintln("[Shutdown] G0 pressed — rebooting");
-            ESP.restart();
-        }
-        delay(50);
+        handleShutdown();
         break;
 
     case STATE_ERROR:
@@ -271,7 +302,66 @@ void loop()
     default:
         break;
     }
+
+    unsigned long loopDuration = millis() - loopStartMs;
+    if (loopDuration > session.maxLoopTime)
+    {
+        session.maxLoopTime = loopDuration;
+    }
+
     delay(1);
+}
+
+// ── Upload helpers (used by both auto and shutdown paths) ───────────────
+bool uploadIsConfigured()
+{
+    const UploadConfig &u = session.config.upload;
+    return u.wigle_upload_enabled &&
+           u.upload_ssid.length() > 0 &&
+           u.wigle_api_name.length() > 0 &&
+           u.wigle_api_token.length() > 0;
+}
+
+int countPendingFilesForManual()
+{
+    int count = 0;
+    auto countDir = [](const char *dirPath) -> int
+    {
+        if (!SD.exists(dirPath))
+            return 0;
+        File dir = SD.open(dirPath);
+        if (!dir || !dir.isDirectory())
+        {
+            if (dir)
+                dir.close();
+            return 0;
+        }
+        int n = 0;
+        File entry;
+        while ((entry = dir.openNextFile()))
+        {
+            if (!entry.isDirectory() && entry.size() > 0)
+            {
+                String name(entry.name());
+                int slash = name.lastIndexOf('/');
+                if (slash >= 0)
+                    name = name.substring(slash + 1);
+                if (name.startsWith(CSV_PREFIX) && name.endsWith(".csv"))
+                {
+                    n++;
+                }
+            }
+            entry.close();
+        }
+        dir.close();
+        return n;
+    };
+    count += countDir(CSV_DIR);
+    if (session.config.upload.retry_thin_files && session.config.upload.min_sweeps_threshold > 0)
+    {
+        count += countDir(UPLOAD_THIN_DIR);
+    }
+    return count;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -393,7 +483,11 @@ void executeKeyAction(KeyAction action)
         session.lastDashDUpdate = 0;
         session.lastDashEUpdate = 0;
         session.lastDashFUpdate = 0;
-        logger.debugPrintln("[Input] Dashboard toggled");
+
+        if (superDebug)
+        {
+            logger.debugPrintln("[Input] Dashboard toggled");
+        }
         return;
 
     case KEY_ACTION_TOGGLE_BLANK:
@@ -412,18 +506,27 @@ void executeKeyAction(KeyAction action)
         {
             alertManager.soundEnableDisplay();
         }
-        logger.debugPrintln(display.isBlank() ? "[Input] 'b' pressed: display off" : "[Input] 'b' pressed: display on");
+        if (superDebug)
+        {
+            logger.debugPrintln(display.isBlank() ? "[Input] 'b' pressed: display off" : "[Input] 'b' pressed: display on");
+        }
         return;
 
     case KEY_ACTION_ENTER_CONFIG:
         alertManager.soundConfigMode();
-        logger.debugPrintln("[Input] 'c' pressed: entering Config Mode");
+        if (superDebug)
+        {
+            logger.debugPrintln("[Input] 'c' pressed: entering Config Mode");
+        }
         enterConfigModeState();
         return;
 
     case KEY_ACTION_SHUTDOWN:
         alertManager.soundShutdown();
-        logger.debugPrintln("[Input] 'q' pressed: entering Shutdown");
+        if (superDebug)
+        {
+            logger.debugPrintln("[Input] 'q' pressed: entering Shutdown");
+        }
         enterShutdownState();
         return;
 
@@ -433,13 +536,19 @@ void executeKeyAction(KeyAction action)
         {
             alertManager.beep();
         }
-        logger.debugPrintln(alertManager.isMuted() ? "[Input] 's' pressed — sound OFF" : "[Input] 's' pressed — sound ON");
+        if (superDebug)
+        {
+            logger.debugPrintln(alertManager.isMuted() ? "[Input] 's' pressed — sound OFF" : "[Input] 's' pressed — sound ON");
+        }
         return;
 
     case KEY_ACTION_SHOW_HELP:
         alertManager.soundHelp();
         display.showHelp();
-        logger.debugPrintln("[Input] 'h' pressed: help shown");
+        if (superDebug)
+        {
+            logger.debugPrintln("[Input] 'h' pressed: help shown");
+        }
         return;
 
     case KEY_ACTION_DISMISS_HELP:
@@ -450,7 +559,10 @@ void executeKeyAction(KeyAction action)
         session.lastDashDUpdate = 0;
         session.lastDashEUpdate = 0;
         session.lastDashFUpdate = 0;
-        logger.debugPrintln("[Input] 'h' pressed: help dismissed");
+        if (superDebug)
+        {
+            logger.debugPrintln("[Input] 'h' pressed: help dismissed");
+        }
         return;
 
     case KEY_ACTION_TOGGLE_SCAN:
@@ -468,13 +580,92 @@ void executeKeyAction(KeyAction action)
         {
             session.channelViewMode = (session.channelViewMode + 1) % 3;
             session.lastDashEUpdate = 0;
-            const char *modeNames[] = {"SESSION", "SWEEP", "UNIQUE"};
-            char buf[64];
-            snprintf(buf, sizeof(buf), "[Input] Space: channel view -> %s mode", modeNames[session.channelViewMode]);
-            logger.debugPrintln(buf);
+            if (superDebug)
+            {
+                const char *modeNames[] = {"SESSION", "SWEEP", "UNIQUE"};
+                char buf[64];
+                snprintf(buf, sizeof(buf), "[Input] Space: channel view -> %s mode", modeNames[session.channelViewMode]);
+                logger.debugPrintln(buf);
+            }
         }
         return;
     }
+
+    case KEY_ACTION_CANCEL_UPLOAD:
+        if (currentState == STATE_UPLOAD_RUN ||
+            (currentState == STATE_SHUTDOWN && shutdownPhase == ShutdownPhase::UPLOADING))
+        {
+            uploadManager.requestCancel();
+        }
+        return;
+
+    case KEY_ACTION_SHUTDOWN_UPLOAD:
+        if (currentState == STATE_SHUTDOWN &&
+            shutdownPhase == ShutdownPhase::LOCKED &&
+            shutdownUploadAvailable)
+        {
+            handleShutdownUploadAction();
+        }
+        return;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RUNTIME MODULE INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════════════
+void initializeRuntimeModulesAndEnterSearching()
+{
+    if (runtimeModulesInitialized)
+    {
+        enterSearchingSatellitesState();
+        return;
+    }
+
+    AppConfig &appConfig = session.config;
+
+    gpsManager.begin(appConfig.gps.tx_pin, appConfig.gps.rx_pin, appConfig.gps.baud, superDebug);
+    dataLogger.setGPSManager(&gpsManager);
+
+    wifiScanner.begin(appConfig.scan.wifi_country_code, appConfig.scan.wifi_tx_power);
+    wifiScanner.configure(appConfig.scan.scan_mode,
+                          appConfig.scan.active_dwell_ms,
+                          appConfig.scan.passive_dwell_ms,
+                          appConfig.scan.mac_randomize_interval,
+                          appConfig.scan.mac_spoof_oui,
+                          superDebug);
+
+    geofenceFilter.configure(appConfig.filter, appConfig.gps.accuracy_threshold_meters);
+
+    runtimeModulesInitialized = true;
+    session.bootTime = millis();
+    checkBattery();
+    session.lastBatteryCheck = millis();
+    if (currentState != STATE_LOW_BATTERY_WARNING)
+    {
+        enterSearchingSatellitesState();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE: UPLOAD RUN (boot-time auto-upload only)
+// ═══════════════════════════════════════════════════════════════════════════
+void enterUploadRunState()
+{
+    currentState = STATE_UPLOAD_RUN;
+    alertManager.setStatusSearching();
+    uploadManager.enter(UploadManager::Mode::AUTO);
+    if (superDebug)
+    {
+        logger.debugPrintln("[State] Entering UPLOAD_RUN (auto)");
+    }
+}
+
+void handleUploadRun()
+{
+    if (uploadManager.tick())
+    {
+        wifiManager.disconnectSTA();
+        initializeRuntimeModulesAndEnterSearching();
     }
 }
 
@@ -932,7 +1123,12 @@ void enterShutdownState(bool lowBattery)
         (uint32_t)wifiScanner.getUniqueCount(),
         session.totalSweeps};
 
-    // 1. Stop WiFi scanning
+    // 1. Stop WiFi scanning and STA work before powering WiFi down
+    if (runtimeModulesInitialized)
+    {
+        wifiScanner.stopScanning();
+    }
+    wifiManager.disconnectSTA();
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
 
@@ -943,7 +1139,18 @@ void enterShutdownState(bool lowBattery)
         dataLogger.close();
     }
 
-    // 3. Flush debug log — log shutdown summary before unmounting SD
+    // 3. Latch upload-availability while SD is still mounted (count
+    //    pending files, then decide visibility for the locked screen).
+    cachedPendingFileCount = countPendingFilesForManual();
+    shutdownUploadAvailable = !lowBattery &&
+                              uploadIsConfigured() &&
+                              cachedPendingFileCount > 0;
+    shutdownSummary = summary;
+    shutdownLowBattery = lowBattery;
+
+    // 4. Flush debug log — log shutdown summary before unmounting SD
+    logSystemStats(millis(), "exit");
+
     {
         char shutdownBuf[SYSTEM_STATS_LINE_BUFFER_SIZE];
         snprintf(shutdownBuf, sizeof(shutdownBuf),
@@ -957,15 +1164,112 @@ void enterShutdownState(bool lowBattery)
                  (unsigned long)summary.averageScanMs);
         logger.debugPrintln(shutdownBuf);
     }
-    logger.debugPrintln("[Shutdown] Final log entry before SD unmount");
+    logger.debugPrintln("[Shutdown] done.");
 
-    // 4. Unmount SD card so it's safe to remove
+    // 5. Unmount SD card so it's safe to remove
     SD.end();
 
-    // 5. Set state and show locked screen
+    // 6. Set state and show locked screen
     currentState = STATE_SHUTDOWN;
+    shutdownPhase = ShutdownPhase::LOCKED;
     alertManager.clearLED(); // LED off
-    display.showShutdown(summary, lowBattery);
+    display.showShutdownLocked(shutdownSummary, shutdownLowBattery, shutdownUploadAvailable);
+    logger.debugPrintln(String("[Shutdown] Locked screen shown (uploadAvailable=") +
+                        String(shutdownUploadAvailable ? 1 : 0) + ")");
+}
+
+// ── Shutdown-driven manual upload helpers ───────────────────────────────────
+static bool prepareForShutdownUpload()
+{
+    // Re-mount SD over the same SPI bus used during normal operation.
+    SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_SPI_CS_PIN);
+    if (!SD.begin(SD_SPI_CS_PIN, SPI, 25000000))
+    {
+        logger.debugPrintln("[Shutdown] SD remount FAILED");
+        return false;
+    }
+
+    // Re-enable WiFi STA. wifiManager was already begun() earlier in setup
+    // (assuming runtime modules initialised). For boot-time low-battery
+    // shutdowns the user wouldn't see U=Upload, so we don't worry about
+    // that path here.
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect(true);
+    logger.debugPrintln("[Shutdown] SD remount OK; WiFi STA ready");
+    return true;
+}
+
+void handleShutdownUploadAction()
+{
+    logger.debugPrintln("[Shutdown] U pressed; preparing manual upload");
+    shutdownPhase = ShutdownPhase::UPLOAD_PREP;
+    display.ensureUnblanked(session.config.hardware.screen_brightness);
+
+    logSystemStats(millis(), "pre_upload");
+
+    if (!prepareForShutdownUpload())
+    {
+        display.showUploadError("SD/WiFi init failed", Display::ExitMode::RETURN_TO_SHUTDOWN);
+        shutdownPhase = ShutdownPhase::RELOCKING;
+        return;
+    }
+
+    // Re-check config + pending count guard (defensive)
+    if (!uploadIsConfigured() || cachedPendingFileCount == 0)
+    {
+        display.showUploadError("Nothing to upload", Display::ExitMode::RETURN_TO_SHUTDOWN);
+        shutdownPhase = ShutdownPhase::RELOCKING;
+        return;
+    }
+
+    alertManager.beep();
+    uploadManager.enter(UploadManager::Mode::MANUAL_SHUTDOWN);
+    shutdownUploadAvailable = false; // latch off — only one upload allowed
+    shutdownPhase = ShutdownPhase::UPLOADING;
+}
+
+void handleShutdown()
+{
+    switch (shutdownPhase)
+    {
+    case ShutdownPhase::LOCKED:
+        if (M5Cardputer.BtnA.wasPressed())
+        {
+            logger.debugPrintln("[Shutdown] G0 pressed — rebooting");
+            ESP.restart();
+        }
+        delay(50);
+        return;
+
+    case ShutdownPhase::UPLOAD_PREP:
+        // Transient: should not persist > 1 tick. Guard for safety.
+        shutdownPhase = ShutdownPhase::LOCKED;
+        return;
+
+    case ShutdownPhase::UPLOADING:
+        if (M5Cardputer.BtnA.wasPressed())
+        {
+            logger.debugPrintln("[Shutdown] G0 pressed during upload — rebooting");
+            ESP.restart();
+        }
+        if (uploadManager.tick())
+        {
+            logger.debugPrintln("[Shutdown] Upload phase complete; relocking");
+            shutdownPhase = ShutdownPhase::RELOCKING;
+        }
+        return;
+
+    case ShutdownPhase::RELOCKING:
+        wifiManager.disconnectSTA();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        SD.end();
+        alertManager.clearLED();
+        display.showShutdownLocked(shutdownSummary, shutdownLowBattery, /*uploadAvailable=*/false);
+        logger.debugPrintln("[Shutdown] Re-cleanup done; locked screen restored (uploadAvailable=0)");
+        shutdownPhase = ShutdownPhase::LOCKED;
+        return;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1028,6 +1332,12 @@ void enterConfigModeState()
     {
         dataLogger.close();
     }
+
+    if (runtimeModulesInitialized)
+    {
+        wifiScanner.stopScanning();
+    }
+    wifiManager.disconnectSTA();
 
     currentState = STATE_CONFIG_MODE;
     alertManager.setStatusConfig();
@@ -1113,7 +1423,7 @@ void processCompletedScan()
     }
 }
 
-void logSystemStatsIfDue(unsigned long now)
+void logSystemStats(unsigned long now, const char *statsType)
 {
     // Only log when debug is enabled and system stats are enabled
     if (!session.config.debug.enabled || !session.config.debug.system_stats_enabled)
@@ -1121,11 +1431,15 @@ void logSystemStatsIfDue(unsigned long now)
         return;
     }
 
-    unsigned long intervalMs = (unsigned long)session.config.debug.system_stats_interval_s * 1000UL;
-    if (session.lastSystemStatsLog != 0 &&
-        (now - session.lastSystemStatsLog < intervalMs))
+    // Only enforce interval check on regular "run" logs; init/exit/pre_upload always log
+    if (strcmp(statsType, "run") == 0)
     {
-        return;
+        unsigned long intervalMs = (unsigned long)session.config.debug.system_stats_interval_s * 1000UL;
+        if (session.lastSystemStatsLog != 0 &&
+            (now - session.lastSystemStatsLog < intervalMs))
+        {
+            return;
+        }
     }
 
     const uint32_t heapSize = ESP.getHeapSize();
@@ -1167,64 +1481,74 @@ void logSystemStatsIfDue(unsigned long now)
     const uint32_t uniqueStations = (uint32_t)wifiScanner.getUniqueCount();
     const size_t bssidSetEstBytes = wifiScanner.getUniqueBSSIDMemoryEstimate();
 
-    // SYSTEM_STATS_LINE_BUFFER_SIZE bytes leaves margin for current key/value lines with max-width numeric values.
-    char line[SYSTEM_STATS_LINE_BUFFER_SIZE];
+    // Hardware/RTOS metrics
+    int battLevel = M5Cardputer.Power.getBatteryLevel();
+    int battMv = M5Cardputer.Power.getBatteryVoltage();
+    bool isCharging = M5Cardputer.Power.isCharging();
+    float tempC = temperatureRead();
+    uint32_t cpuMhz = ESP.getCpuFreqMHz();
+    UBaseType_t taskHwm = uxTaskGetStackHighWaterMark(NULL);
+    UBaseType_t totTasks = uxTaskGetNumberOfTasks();
+    unsigned long maxLoop = session.maxLoopTime;
+    session.maxLoopTime = 0; // reset local maximum after capture
+
+    // Timestamp + epoch (use system RTC; populated when GPS syncs time)
+    time_t epoch_s = time(nullptr);
+    String timestamp;
+    if (epoch_s > 100000L)
+    {
+        struct tm t;
+        gmtime_r(&epoch_s, &t);
+        char ts[24];
+        strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", &t);
+        timestamp = String(ts);
+    }
+    else
+    {
+        timestamp = "";
+        epoch_s = 0;
+    }
+
+    // CSV row buffer (header order from Logger::logStatsCSV)
+    char line[512];
     int written = snprintf(
         line, sizeof(line),
-        "[SystemStats][Memory] uptime_s=%lu mem_used=%lu mem_free=%lu heap_size=%lu heap_used=%lu heap_free=%lu",
+        "%s,%lld,%s,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%llu,%lu,%d,%lu,%lu,%d,%d,%d,%.1f,%lu,%lu,%lu,%lu",
+        timestamp.c_str(),
+        (long long)epoch_s,
+        statsType,
         (unsigned long)(now / 1000UL),
         (unsigned long)totalUsedKnown,
         (unsigned long)totalFreeKnown,
         (unsigned long)heapSize,
         (unsigned long)heapUsed,
-        (unsigned long)heapFree);
-    if (written < 0 || written >= (int)SYSTEM_STATS_LINE_BUFFER_SIZE)
-    {
-        logger.debugPrintln("[SystemStats] Memory line truncated");
-    }
-    logger.debugPrintln(line);
-
-    written = snprintf(
-        line, sizeof(line),
-        "[SystemStats][MemoryExt] min_heap_free=%lu max_alloc_heap=%lu psram_size=%lu psram_free=%lu",
+        (unsigned long)heapFree,
         (unsigned long)minFreeHeap,
         (unsigned long)maxAllocHeap,
         (unsigned long)psramSize,
-        (unsigned long)psramFree);
-    if (written < 0 || written >= (int)SYSTEM_STATS_LINE_BUFFER_SIZE)
-    {
-        logger.debugPrintln("[SystemStats] MemoryExt line truncated");
-    }
-    logger.debugPrintln(line);
-
-    written = snprintf(
-        line, sizeof(line),
-        "[SystemStats][Stations] max_stations_per_sweep=%lu total_stations_seen=%llu unique_stations=%lu last_scan_count=%d bssid_set_count=%lu bssid_set_est_bytes=%lu",
+        (unsigned long)psramFree,
+        (unsigned long)session.totalSweeps,
         (unsigned long)session.maxStationsPerSweep,
         (unsigned long long)session.totalStationsSeen,
         (unsigned long)uniqueStations,
         session.lastScanCount,
-        (unsigned long)uniqueStations,
-        (unsigned long)bssidSetEstBytes);
-    if (written < 0 || written >= (int)SYSTEM_STATS_LINE_BUFFER_SIZE)
-    {
-        logger.debugPrintln("[SystemStats] Stations line truncated");
-    }
-    logger.debugPrintln(line);
+        (unsigned long)uniqueStations, // bssid_set_count (mirrors uniqueStations)
+        (unsigned long)bssidSetEstBytes,
+        battLevel,
+        battMv,
+        isCharging ? 1 : 0,
+        tempC,
+        (unsigned long)cpuMhz,
+        (unsigned long)taskHwm,
+        (unsigned long)totTasks,
+        (unsigned long)maxLoop);
 
-    // Battery stats
-    int battLevel = M5Cardputer.Power.getBatteryLevel();
-    bool isCharging = M5Cardputer.Power.isCharging();
-    written = snprintf(
-        line, sizeof(line),
-        "[SystemStats][Battery] batt_pct=%d is_charging=%d",
-        battLevel, isCharging ? 1 : 0);
-    if (written < 0 || written >= (int)SYSTEM_STATS_LINE_BUFFER_SIZE)
+    if (written < 0 || written >= (int)sizeof(line))
     {
-        logger.debugPrintln("[SystemStats] Battery line truncated");
+        logger.debugPrintln("[SystemStats] CSV row truncated");
     }
-    logger.debugPrintln(line);
 
+    logger.logStatsCSV(String(line));
     session.lastSystemStatsLog = now;
 }
 

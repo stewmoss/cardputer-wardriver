@@ -14,7 +14,7 @@ class AlertManager
 {
 public:
     AlertManager();
-    void begin(HardwareConfig &config);
+    void begin(HardwareConfig &config, bool superDebug = false);
     void triggerAlert();
     void newAPBeep();
     void geoFencedBeep();
@@ -64,6 +64,7 @@ private:
     unsigned long alertStartTime;
     bool initialized;
     bool soundMuted;
+    bool superDebug;
 
     // Tone sequence state
     ToneNote toneSequence[MAX_TONE_SEQUENCE];

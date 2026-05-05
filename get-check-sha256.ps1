@@ -1,4 +1,9 @@
-$filePath = ".\output\wardriver-0.5.2.bin"
+param (
+    [Parameter(Mandatory=$true, HelpMessage="Enter the path to the file you want to hash.")]
+    [string]$filePath
+)
+
+Write-Host "Calculating SHA256 hash for: $filePath" -ForegroundColor Yellow
 
 if (Test-Path $filePath) {
     # Generate the SHA256 hash
@@ -19,7 +24,7 @@ if (Test-Path $filePath) {
     Write-Host "Content: $standardFormat"
 }
 else {
-    Write-Host "Error: File not found at $filePath" -ForegroundColor Red	
+    Write-Host "[Error]: File not found at $filePath" -ForegroundColor Red	
 	exit 1
 }
 
@@ -48,12 +53,12 @@ if (Test-Path $checksumFile) {
         }
     }
     else {
-        Write-Host "Error: The original file ($filePath) was not found to verify against." -ForegroundColor Red
+        Write-Host "[Error]: The original file ($filePath) was not found to verify against." -ForegroundColor Red
 		exit 3
     }
 }
 else {
-    Write-Host "Error: Checksum file ($checksumFile) not found." -ForegroundColor Red
+    Write-Host "[Error]: Checksum file ($checksumFile) not found." -ForegroundColor Red
 	exit 4
 }
 

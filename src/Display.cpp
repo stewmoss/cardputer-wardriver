@@ -84,7 +84,7 @@ void Display::showStartup(const char *modelName, const char *source)
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
 }
 
-void Display::showShutdown(const SessionSummary &summary, bool lowBattery)
+void Display::showShutdownLocked(const SessionSummary &summary, bool lowBattery, bool uploadAvailable)
 {
     clearScreen();
 
@@ -132,7 +132,14 @@ void Display::showShutdown(const SessionSummary &summary, bool lowBattery)
 
     M5Cardputer.Display.setTextColor(0x7BEF, COL_BG); // grey
     M5Cardputer.Display.setCursor(10, 126);
-    M5Cardputer.Display.print("G0=Reboot  B=Screen off");
+    if (uploadAvailable)
+    {
+        M5Cardputer.Display.print("U=Upload  G0=Reboot  B=Off");
+    }
+    else
+    {
+        M5Cardputer.Display.print("G0=Reboot  B=Screen off");
+    }
 
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
     M5Cardputer.Display.setTextSize(1);
@@ -343,6 +350,15 @@ void Display::_resetCaches()
     memset(_dashECache.barColors, 0, sizeof(_dashECache.barColors));
     _dashECache.maxY = 0;
     _dashECache.viewMode = 0;
+
+    _uploadCache.screen = "";
+    _uploadCache.line1 = _uploadCache.line2 = _uploadCache.line3 = S;
+    _uploadCache.bytesSent = 0;
+    _uploadCache.bytesTotal = 0;
+    _uploadCache.fileIndex = 0;
+    _uploadCache.totalFiles = 0;
+    _uploadCache.elapsedSec = 0;
+    _uploadCache.retryAvailable = false;
 }
 
 void Display::_drawField(const String &oldVal, const String &newVal,
@@ -375,6 +391,294 @@ void Display::showError(const String &msg)
     M5Cardputer.Display.setCursor(10, 65);
     M5Cardputer.Display.print(msg);
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+}
+
+void Display::showUploadScanning(const String &ssid)
+{
+    if (_uploadCache.screen != "upload_scan")
+    {
+        clearScreen();
+        drawUploadHeader("AUTO-UPLOAD", COL_HEADER);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+        M5Cardputer.Display.setCursor(10, 34);
+        M5Cardputer.Display.print("Looking for home network");
+        M5Cardputer.Display.setCursor(10, 74);
+        M5Cardputer.Display.setTextColor(0x7BEF, COL_BG);
+        M5Cardputer.Display.print("Skip if SSID is not found");
+        drawFooter("G0=cancel");
+        _uploadCache.screen = "upload_scan";
+        _uploadCache.line1 = "\x01";
+    }
+
+    String ssidLine = "SSID: " + truncateSSID(ssid, 28);
+    _drawField(_uploadCache.line1, ssidLine, 10, 52, COL_YELLOW);
+    _uploadCache.line1 = ssidLine;
+}
+
+void Display::showUploadCountdown(int pendingFiles, int secondsRemaining)
+{
+    if (_uploadCache.screen != "upload_countdown")
+    {
+        clearScreen();
+        drawUploadHeader("AUTO-UPLOAD", COL_HEADER);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(COL_GREEN, COL_BG);
+        M5Cardputer.Display.setCursor(10, 32);
+        M5Cardputer.Display.print("Home network found");
+        M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+        M5Cardputer.Display.setCursor(10, 52);
+        M5Cardputer.Display.print("Files pending:");
+        M5Cardputer.Display.setCursor(10, 78);
+        M5Cardputer.Display.print("Starting in:");
+        drawFooter("G0=cancel");
+        _uploadCache.screen = "upload_countdown";
+        _uploadCache.line1 = _uploadCache.line2 = "\x01";
+    }
+
+    String files = String(pendingFiles);
+    String seconds = String(secondsRemaining);
+    _drawField(_uploadCache.line1, files, 96, 52, COL_TEXT);
+    _drawField(_uploadCache.line2, seconds, 82, 78, COL_YELLOW, 2);
+    _uploadCache.line1 = files;
+    _uploadCache.line2 = seconds;
+}
+
+void Display::showUploadLowBattery(int batteryPct, int secondsRemaining)
+{
+    if (_uploadCache.screen != "upload_low_batt")
+    {
+        clearScreen();
+        drawUploadHeader("UPLOAD LOW BATTERY", COL_ORANGE);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+        M5Cardputer.Display.setCursor(10, 38);
+        M5Cardputer.Display.print("Upload may not complete");
+        M5Cardputer.Display.setCursor(10, 66);
+        M5Cardputer.Display.print("Skip in:");
+        drawFooter("ENT=continue G0=skip");
+        _uploadCache.screen = "upload_low_batt";
+        _uploadCache.line1 = _uploadCache.line2 = "\x01";
+    }
+
+    String battery = String("Battery: ") + String(batteryPct) + "%";
+    String seconds = String(secondsRemaining);
+    _drawField(_uploadCache.line1, battery, 10, 24, COL_RED);
+    _drawField(_uploadCache.line2, seconds, 62, 66, COL_YELLOW, 2);
+    _uploadCache.line1 = battery;
+    _uploadCache.line2 = seconds;
+}
+
+void Display::showUploadProgress(const String &filename,
+                                 uint32_t fileIndex,
+                                 uint32_t totalFiles,
+                                 uint32_t bytesSent,
+                                 uint32_t bytesTotal,
+                                 uint32_t elapsedSec)
+{
+    if (_uploadCache.screen != "upload_progress" || _uploadCache.line1 != filename)
+    {
+        clearScreen();
+        drawUploadHeader("UPLOADING TO WiGLE", COL_HEADER);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+        M5Cardputer.Display.setCursor(10, 30);
+        M5Cardputer.Display.print(truncateSSID(filename, 34));
+        M5Cardputer.Display.drawRect(10, 52, 164, 12, COL_LABEL);
+        M5Cardputer.Display.setCursor(10, 78);
+        M5Cardputer.Display.print("File:");
+        M5Cardputer.Display.setCursor(112, 78);
+        M5Cardputer.Display.print("Elapsed:");
+        drawFooter("G0=cancel");
+        _uploadCache.screen = "upload_progress";
+        _uploadCache.line1 = filename;
+        _uploadCache.line2 = _uploadCache.line3 = "\x01";
+        _uploadCache.bytesSent = 0xFFFFFFFFUL;
+        _uploadCache.bytesTotal = 0xFFFFFFFFUL;
+        _uploadCache.fileIndex = 0xFFFFFFFFUL;
+        _uploadCache.totalFiles = 0xFFFFFFFFUL;
+        _uploadCache.elapsedSec = 0xFFFFFFFFUL;
+    }
+
+    if (_uploadCache.bytesSent != bytesSent || _uploadCache.bytesTotal != bytesTotal)
+    {
+        uint32_t percent = (bytesTotal > 0) ? (bytesSent * 100UL / bytesTotal) : 0;
+        if (percent > 100)
+            percent = 100;
+        int filled = (int)(160UL * percent / 100UL);
+        M5Cardputer.Display.fillRect(12, 54, 160, 8, COL_BG);
+        if (filled > 0)
+        {
+            M5Cardputer.Display.fillRect(12, 54, filled, 8, COL_GREEN);
+        }
+        M5Cardputer.Display.fillRect(180, 50, 54, 16, COL_BG);
+        M5Cardputer.Display.setTextSize(1);
+        M5Cardputer.Display.setTextColor(COL_YELLOW, COL_BG);
+        M5Cardputer.Display.setCursor(180, 54);
+        M5Cardputer.Display.print(String(percent) + "%");
+        _uploadCache.bytesSent = bytesSent;
+        _uploadCache.bytesTotal = bytesTotal;
+    }
+
+    String fileText = String(fileIndex) + "/" + String(totalFiles);
+    String elapsedText = formatDuration(elapsedSec);
+    _drawField(_uploadCache.line2, fileText, 44, 78, COL_TEXT);
+    _drawField(_uploadCache.line3, elapsedText, 164, 78, COL_TEXT);
+    _uploadCache.line2 = fileText;
+    _uploadCache.line3 = elapsedText;
+}
+
+void Display::showUploadComplete(const UploadStats &stats, bool retryAvailable, ExitMode exitMode)
+{
+    String summaryKey = String(stats.successCount) + ":" + String(stats.failCount) + ":" +
+                        String(stats.thinCount) + ":" +
+                        formatBytes(stats.bytesOriginal) + ":" +
+                        formatBytes(stats.bytesCompressed) + ":" +
+                        String(stats.recordCount) + ":" + String(retryAvailable) + ":" +
+                        String((int)exitMode);
+    if (_uploadCache.screen == "upload_complete" && _uploadCache.line1 == summaryKey)
+    {
+        return;
+    }
+
+    clearScreen();
+    bool anyIssue = (stats.failCount > 0 || stats.thinCount > 0);
+    drawUploadHeader("UPLOAD COMPLETE", anyIssue ? COL_ORANGE : COL_GREEN);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
+    M5Cardputer.Display.setCursor(10, 26);
+    M5Cardputer.Display.print("Uploaded:");
+    M5Cardputer.Display.setCursor(10, 42);
+    M5Cardputer.Display.print("Failed:");
+    M5Cardputer.Display.setCursor(10, 58);
+    M5Cardputer.Display.print("Skipped:");
+    M5Cardputer.Display.setCursor(10, 74);
+    M5Cardputer.Display.print("Records:");
+    M5Cardputer.Display.setCursor(10, 90);
+    M5Cardputer.Display.print("Original:");
+    M5Cardputer.Display.setCursor(10, 106);
+    M5Cardputer.Display.print("Sent:");
+
+    M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+    M5Cardputer.Display.setCursor(76, 26);
+    M5Cardputer.Display.print(String(stats.successCount) + " / " + String(stats.totalFiles));
+    M5Cardputer.Display.setCursor(76, 42);
+    M5Cardputer.Display.print(String(stats.failCount));
+    M5Cardputer.Display.setTextColor(COL_YELLOW, COL_BG);
+    M5Cardputer.Display.setCursor(76, 58);
+    M5Cardputer.Display.print(String(stats.thinCount));
+    M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+    M5Cardputer.Display.setCursor(76, 74);
+    M5Cardputer.Display.print(String(stats.recordCount));
+    M5Cardputer.Display.setCursor(76, 90);
+    M5Cardputer.Display.print(formatBytes(stats.bytesOriginal));
+    M5Cardputer.Display.setCursor(76, 106);
+    M5Cardputer.Display.print(formatBytes(stats.bytesCompressed));
+
+    const char *footer;
+    if (exitMode == ExitMode::REBOOT && retryAvailable)
+    {
+        footer = "ENT=reboot  R=retry";
+    }
+    else if (exitMode == ExitMode::REBOOT)
+    {
+        footer = "Press G0 to reboot";
+    }
+    else if (exitMode == ExitMode::RETURN_TO_SHUTDOWN)
+    {
+        footer = "Press G0 to continue";
+    }
+    else if (retryAvailable)
+    {
+        footer = "ENT=continue R=retry";
+    }
+    else
+    {
+        footer = "ENT=continue";
+    }
+    drawFooter(footer);
+    _uploadCache.screen = "upload_complete";
+    _uploadCache.line1 = summaryKey;
+    _uploadCache.retryAvailable = retryAvailable;
+}
+
+void Display::showUploadError(const String &message, ExitMode exitMode)
+{
+    String key = message + "|" + String((int)exitMode);
+    if (_uploadCache.screen == "upload_error" && _uploadCache.line1 == key)
+    {
+        return;
+    }
+
+    clearScreen();
+    drawUploadHeader("UPLOAD FAILED", COL_RED);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+    M5Cardputer.Display.setCursor(10, 34);
+    M5Cardputer.Display.print(truncateSSID(message, 34));
+    M5Cardputer.Display.setTextColor(COL_YELLOW, COL_BG);
+    M5Cardputer.Display.setCursor(10, 66);
+    M5Cardputer.Display.print("Check WiFi and API settings");
+    const char *footer;
+    switch (exitMode)
+    {
+    case ExitMode::REBOOT:
+        footer = "Any key=reboot";
+        break;
+    case ExitMode::RETURN_TO_SHUTDOWN:
+        footer = "Any key=continue";
+        break;
+    case ExitMode::RETURN:
+    default:
+        footer = "Any key=continue";
+        break;
+    }
+    drawFooter(footer);
+    _uploadCache.screen = "upload_error";
+    _uploadCache.line1 = key;
+}
+
+void Display::showUploadSweepScanning(const String &filename,
+                                      uint32_t fileIndex,
+                                      uint32_t totalFiles)
+{
+    String key = filename + "|" + String(fileIndex) + "/" + String(totalFiles);
+    if (_uploadCache.screen == "sweep_scan" && _uploadCache.line1 == key)
+    {
+        return;
+    }
+    clearScreen();
+    drawUploadHeader("CHECKING SWEEPS", COL_HEADER);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+    M5Cardputer.Display.setCursor(10, 30);
+    M5Cardputer.Display.print("Checking:");
+    M5Cardputer.Display.setCursor(10, 46);
+    M5Cardputer.Display.print(truncateSSID(filename, 34));
+    M5Cardputer.Display.setTextColor(COL_CYAN, COL_BG);
+    M5Cardputer.Display.setCursor(10, 70);
+    M5Cardputer.Display.print("File:");
+    M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+    M5Cardputer.Display.setCursor(50, 70);
+    M5Cardputer.Display.print(String(fileIndex) + " / " + String(totalFiles));
+    drawFooter("Counting sweeps...");
+    _uploadCache.screen = "sweep_scan";
+    _uploadCache.line1 = key;
+}
+
+void Display::showUploadCancelled()
+{
+    clearScreen();
+    M5Cardputer.Display.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, COL_RED);
+    M5Cardputer.Display.setTextColor(COL_TEXT, COL_RED);
+    M5Cardputer.Display.setTextSize(2);
+    M5Cardputer.Display.setCursor(40, 40);
+    M5Cardputer.Display.print("Cancelled");
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setCursor(60, 80);
+    M5Cardputer.Display.print("Rebooting...");
+    M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+    _uploadCache.screen = "upload_cancelled";
 }
 
 void Display::updateDashboardA(const GPSData &gps, const String &filename,
@@ -1169,6 +1473,16 @@ void Display::drawHeader(const String &title)
     M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
 }
 
+void Display::drawUploadHeader(const String &title, uint16_t color)
+{
+    M5Cardputer.Display.fillRect(0, 0, SCREEN_WIDTH, HEADER_HEIGHT, color);
+    M5Cardputer.Display.setTextColor(COL_TEXT, color);
+    M5Cardputer.Display.setTextSize(1);
+    M5Cardputer.Display.setCursor(5, 5);
+    M5Cardputer.Display.print(title);
+    M5Cardputer.Display.setTextColor(COL_TEXT, COL_BG);
+}
+
 void Display::drawFooter(const String &status)
 {
     int footerY = SCREEN_HEIGHT - FOOTER_HEIGHT;
@@ -1197,6 +1511,28 @@ String Display::formatUptime(unsigned long ms)
     char buf[12];
     snprintf(buf, sizeof(buf), "%02lu:%02lu:%02lu", hrs, mins % 60, secs % 60);
     return String(buf);
+}
+
+String Display::formatDuration(uint32_t seconds)
+{
+    uint32_t mins = seconds / 60UL;
+    uint32_t secs = seconds % 60UL;
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%02lu:%02lu", (unsigned long)mins, (unsigned long)secs);
+    return String(buf);
+}
+
+String Display::formatBytes(uint64_t bytes)
+{
+    if (bytes >= 1048576ULL)
+    {
+        return String((double)bytes / 1048576.0, 1) + " MB";
+    }
+    if (bytes >= 1024ULL)
+    {
+        return String((double)bytes / 1024.0, 1) + " KB";
+    }
+    return String((unsigned long)bytes) + " B";
 }
 
 String Display::truncateSSID(const String &ssid, int maxLen)

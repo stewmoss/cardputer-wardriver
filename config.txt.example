@@ -51,5 +51,17 @@
     "web": {
         "admin_user": "admin",
         "admin_pass": "password"
+    },
+    "upload": {
+        "wigle_upload_enabled": false,
+        "auto_upload": false,
+        "upload_ssid": "MyHomeNetwork",
+        "upload_password": "MyWiFiPassword",
+        "wigle_api_name": "AID00000000000000000000000000000",
+        "wigle_api_token": "abcdef0123456789abcdef0123456789",
+        "compress_before_upload": true,
+        "delete_after_upload": false,
+        "min_sweeps_threshold": 20,
+        "retry_thin_files": false
     }
 }
